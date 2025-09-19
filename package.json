@@ -1,0 +1,32 @@
+{
+  "name": "csv-import-vue-vuetify",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "homepage": "https://TU-USUARIO.github.io/csv-import-vue-vuetify",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && gh-pages -d dist"
+  },
+  "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "dotenv": "^17.2.2",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.18",
+    "vuetify": "^3.10.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "gh-pages": "^6.3.0",
+    "sass": "^1.92.1",
+    "sass-embedded": "^1.92.1",
+    "vite": "^7.0.6",
+    "vite-plugin-vue-devtools": "^8.0.0",
+    "vite-plugin-vuetify": "^2.1.2"
+  }
+}
