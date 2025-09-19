@@ -2,6 +2,48 @@
   <v-container fluid>
     <v-row justify="center">
       <v-col cols="12" md="8" lg="6">
+        <!-- Sección de credenciales -->
+        <v-card elevation="2" class="mb-4" v-if="!credentials.saved">
+          <v-card-title class="d-flex align-center">
+            <v-icon class="mr-3" color="warning">mdi-key</v-icon>
+            <span class="text-h6">Credenciales de Acceso</span>
+          </v-card-title>
+          <v-card-text>
+            <v-alert type="info" variant="tonal" class="mb-4">
+              Ingresa tus credenciales para acceder a la API
+            </v-alert>
+            <v-row>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="authForm.username"
+                  label="Usuario"
+                  prepend-icon="mdi-account"
+                  variant="outlined"
+                  :rules="[rules.required]"
+                />
+              </v-col>
+              <v-col cols="12" md="6">
+                <v-text-field
+                  v-model="authForm.password"
+                  label="Contraseña"
+                  type="password"
+                  prepend-icon="mdi-lock"
+                  variant="outlined"
+                  :rules="[rules.required]"
+                />
+              </v-col>
+            </v-row>
+            <v-btn 
+              @click="saveCredentials"
+              color="primary"
+              :disabled="!authForm.username || !authForm.password"
+              prepend-icon="mdi-check"
+            >
+              Guardar Credenciales
+            </v-btn>
+          </v-card-text>
+        </v-card>
+
         <!-- Instrucciones de Uso -->
         <v-card elevation="2" class="mb-6">
           <v-card-title class="d-flex align-center py-4">
@@ -85,7 +127,7 @@
                   </v-avatar>
                 </template>
                 <v-list-item-title class="text-body-1">
-                  Espera a que se complete el proceso y revisa los resultados detallados para verificar el éxito de la operación.
+                  Espera a que se complete el proceso. Los registros se procesarán en lotes de 10 para evitar desconexiones.
                 </v-list-item-title>
               </v-list-item>
             </v-list>
@@ -93,7 +135,7 @@
         </v-card>
 
         <!-- Formulario Principal -->
-        <v-card elevation="3">
+        <v-card elevation="3" :disabled="!credentials.saved">
           <v-card-title class="text-h4 text-center py-6">
             <v-icon left size="large" color="primary">mdi-file-table-outline</v-icon>
             Importador de CSV
@@ -213,11 +255,14 @@
                     <template v-if="connectionStatus.error">
                       <div class="text-caption mt-2">{{ connectionStatus.error }}</div>
                     </template>
+                    <template v-if="connectionStatus.tokenExpiry">
+                      <div class="text-caption mt-2">Token expira: {{ connectionStatus.tokenExpiry }}</div>
+                    </template>
                   </v-alert>
                 </v-col>
               </v-row>
 
-              <!-- Indicador de carga -->
+              <!-- Indicador de carga con progreso -->
               <v-row v-if="isLoading">
                 <v-col cols="12">
                   <v-card variant="tonal" color="primary">
@@ -230,7 +275,19 @@
                       />
                       <div class="text-h6">Procesando archivo CSV...</div>
                       <div class="text-body-2 mt-2">
-                        Por favor espera mientras se procesa el archivo
+                        Los registros se procesan en lotes para evitar desconexiones
+                      </div>
+                      <!-- Mostrar progreso si hay resultados parciales -->
+                      <div v-if="processingResults" class="mt-4">
+                        <v-progress-linear
+                          :model-value="(processingResults.procesadasExitosamente + processingResults.duplicados + processingResults.errores) / processingResults.totalFilas * 100"
+                          color="success"
+                          height="6"
+                          rounded
+                        />
+                        <div class="text-caption mt-2">
+                          Procesados: {{ processingResults.procesadasExitosamente + processingResults.duplicados + processingResults.errores }} / {{ processingResults.totalFilas }}
+                        </div>
                       </div>
                     </v-card-text>
                   </v-card>
@@ -248,6 +305,7 @@
                     size="large"
                     block
                     prepend-icon="mdi-connection"
+                    :disabled="!credentials.saved"
                   >
                     Probar Conexión
                   </v-btn>
@@ -257,7 +315,7 @@
                   <v-btn
                     type="submit"
                     :loading="isLoading"
-                    :disabled="!selectedFile"
+                    :disabled="!selectedFile || !credentials.saved"
                     variant="elevated"
                     color="primary"
                     size="large"
@@ -273,24 +331,26 @@
         </v-card>
 
         <!-- Componente de resultados -->
-        <CSVResults v-if="processingResults" :results="processingResults" class="mt-6" />
+        <CSVResults v-if="processingResults && !isLoading" :results="processingResults" class="mt-6" />
       </v-col>
     </v-row>
   </v-container>
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useCSV } from  '../composables/useCSV'
+import { ref, reactive, computed } from 'vue'
+import { useCSV } from '../composables/useCSV'
 import CSVResults from './csvResult.vue'
 
 const { 
   isLoading, 
   processingResults, 
   connectionStatus,
+  credentials,
   processCSV, 
   testConnection: testConn, 
-  updateFormParams 
+  updateFormParams,
+  setCredentials
 } = useCSV()
 
 const form = ref(null)
@@ -303,8 +363,20 @@ const localFormParams = reactive({
   statusflowid: ''
 })
 
+const authForm = reactive({
+  username: '',
+  password: ''
+})
+
 const rules = {
   required: value => !!value || 'Este campo es requerido'
+}
+
+// Guardar credenciales
+function saveCredentials() {
+  if (authForm.username && authForm.password) {
+    setCredentials(authForm.username, authForm.password)
+  }
 }
 
 // Funciones para configuración rápida
@@ -342,9 +414,9 @@ async function handleSubmit() {
   console.log('=== DEBUG IMPORTAR ===')
   console.log('Form params:', localFormParams)
   console.log('Selected file:', selectedFile.value)
-  console.log('File array:', selectedFileArray.value)
+  console.log('Credentials saved:', credentials.value.saved)
 
-  if (!selectedFile.value) {
+  if (!selectedFile.value || !credentials.value.saved) {
     return
   }
 
@@ -356,6 +428,14 @@ async function handleSubmit() {
     console.log('✅ Procesamiento completado')
   } catch (error) {
     console.error('Error procesando CSV:', error)
+    // Mostrar error al usuario
+    alert(`Error procesando CSV: ${error.message}`)
   }
 }
 </script>
+
+<style scoped>
+.v-card--disabled {
+  opacity: 0.6;
+}
+</style>

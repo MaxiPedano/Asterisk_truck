@@ -1,5 +1,6 @@
+// composables/useCSV.js - Actualizado
 import { computed } from 'vue'
-import { useCsvStore } from './../stores/csvStore'
+import { useCsvStore } from '@/stores/csvStore'
 
 export function useCSV() {
   const csvStore = useCsvStore()
@@ -10,10 +11,12 @@ export function useCSV() {
     processingResults: computed(() => csvStore.processingResults),
     connectionStatus: computed(() => csvStore.connectionStatus),
     formParams: computed(() => csvStore.formParams),
+    credentials: computed(() => csvStore.credentials),
 
     // Actions
     processCSV: csvStore.processCSV,
     testConnection: csvStore.testConnection,
-    updateFormParams: csvStore.updateFormParams
+    updateFormParams: csvStore.updateFormParams,
+    setCredentials: csvStore.setCredentials
   }
 }
