@@ -2,6 +2,97 @@
   <v-container fluid>
     <v-row justify="center">
       <v-col cols="12" md="8" lg="6">
+        <!-- Instrucciones de Uso -->
+        <v-card elevation="2" class="mb-6">
+          <v-card-title class="d-flex align-center py-4">
+            <v-icon class="mr-3" size="large" color="info">mdi-clipboard-text-outline</v-icon>
+            <span class="text-h5">Instrucciones de Uso</span>
+          </v-card-title>
+          
+          <v-card-text>
+            <v-list density="compact">
+              <v-list-item>
+                <template #prepend>
+                  <v-avatar size="24" color="primary" class="text-white">
+                    <span class="text-caption">1</span>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="text-body-1">
+                  Selecciona un archivo CSV con los datos a importar desde tu computadora.
+                </v-list-item-title>
+              </v-list-item>
+
+              <v-list-item>
+                <template #prepend>
+                  <v-avatar size="24" color="primary" class="text-white">
+                    <span class="text-caption">2</span>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="text-body-1 mb-3">
+                  Completa los campos requeridos con los valores correspondientes:
+                </v-list-item-title>
+                <div class="ml-8">
+                  <v-alert 
+                    variant="tonal" 
+                    color="success" 
+                    density="compact" 
+                    class="mb-2"
+                    icon="mdi-shopping"
+                  >
+                    <div class="text-body-2">
+                      <strong>COMPRAS B:</strong> FLOWID: 11079 | STATUSFLOW: 774 | STATUSID: 1692
+                    </div>
+                  </v-alert>
+                  <v-alert 
+                    variant="tonal" 
+                    color="info" 
+                    density="compact"
+                    icon="mdi-shopping-outline"
+                  >
+                    <div class="text-body-2">
+                      <strong>COMPRAS A:</strong> FLOWID: 11080 | STATUSFLOW: 776 | STATUSID: 1711
+                    </div>
+                  </v-alert>
+                </div>
+              </v-list-item>
+
+              <v-list-item>
+                <template #prepend>
+                  <v-avatar size="24" color="primary" class="text-white">
+                    <span class="text-caption">3</span>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="text-body-1">
+                  Verifica que todos los campos obligatorios estén completos antes de continuar.
+                </v-list-item-title>
+              </v-list-item>
+
+              <v-list-item>
+                <template #prepend>
+                  <v-avatar size="24" color="primary" class="text-white">
+                    <span class="text-caption">4</span>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="text-body-1">
+                  Haz clic en "Importar CSV" para iniciar la importación de datos.
+                </v-list-item-title>
+              </v-list-item>
+
+              <v-list-item>
+                <template #prepend>
+                  <v-avatar size="24" color="primary" class="text-white">
+                    <span class="text-caption">5</span>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="text-body-1">
+                  Espera a que se complete el proceso y revisa los resultados detallados para verificar el éxito de la operación.
+                </v-list-item-title>
+              </v-list-item>
+            </v-list>
+          </v-card-text>
+        </v-card>
+
+        <!-- Formulario Principal -->
         <v-card elevation="3">
           <v-card-title class="text-h4 text-center py-6">
             <v-icon left size="large" color="primary">mdi-file-table-outline</v-icon>
@@ -21,6 +112,8 @@
                     prepend-icon="mdi-flow-icon"
                     variant="outlined"
                     density="comfortable"
+                    hint="Ej: 11079 (Compras B) o 11080 (Compras A)"
+                    persistent-hint
                   />
                 </v-col>
                 
@@ -33,6 +126,8 @@
                     prepend-icon="mdi-information-outline"
                     variant="outlined"
                     density="comfortable"
+                    hint="Ej: 1692 (Compras B) o 1711 (Compras A)"
+                    persistent-hint
                   />
                 </v-col>
                 
@@ -45,7 +140,40 @@
                     prepend-icon="mdi-state-machine"
                     variant="outlined"
                     density="comfortable"
+                    hint="Ej: 774 (Compras B) o 776 (Compras A)"
+                    persistent-hint
                   />
+                </v-col>
+              </v-row>
+
+              <!-- Botones de acceso rápido -->
+              <v-row class="mb-4">
+                <v-col cols="12">
+                  <v-card variant="outlined" color="grey-lighten-4">
+                    <v-card-text>
+                      <div class="text-subtitle-2 mb-3">🚀 Configuración rápida:</div>
+                      <div class="d-flex flex-wrap gap-2">
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="success"
+                          @click="setComprasB"
+                          prepend-icon="mdi-shopping"
+                        >
+                          Compras B
+                        </v-btn>
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="info"
+                          @click="setComprasA"
+                          prepend-icon="mdi-shopping-outline"
+                        >
+                          Compras A
+                        </v-btn>
+                      </div>
+                    </v-card-text>
+                  </v-card>
                 </v-col>
               </v-row>
 
@@ -179,11 +307,24 @@ const rules = {
   required: value => !!value || 'Este campo es requerido'
 }
 
+// Funciones para configuración rápida
+function setComprasB() {
+  localFormParams.flowid = '11079'
+  localFormParams.statusid = '1692'
+  localFormParams.statusflowid = '774'
+}
+
+function setComprasA() {
+  localFormParams.flowid = '11080'
+  localFormParams.statusid = '1711'
+  localFormParams.statusflowid = '776'
+}
+
 function handleFileSelect() {
-   console.log('=== DEBUG FILE SELECT ===')
+  console.log('=== DEBUG FILE SELECT ===')
   console.log('selectedFileArray.value:', selectedFileArray.value)
   console.log('selectedFileArray.value[0]:', selectedFileArray.value[0])
-    const file = event.target?.files?.[0] || selectedFileArray.value?.[0] || null
+  const file = event.target?.files?.[0] || selectedFileArray.value?.[0] || null
   selectedFile.value = file
   console.log('selectedFile.value después:', selectedFile.value)
   console.log('Botón debería estar:', selectedFile.value ? 'HABILITADO' : 'DESHABILITADO')
@@ -202,11 +343,6 @@ async function handleSubmit() {
   console.log('Form params:', localFormParams)
   console.log('Selected file:', selectedFile.value)
   console.log('File array:', selectedFileArray.value)
- /*  const { valid } = await form.value.validate()
-  
-  if (!valid) {
-    return
-  } */
 
   if (!selectedFile.value) {
     return
