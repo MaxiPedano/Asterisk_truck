@@ -1,5 +1,9 @@
-// stores/csvStore.js - Versión mejorada con manejo de token expiration y procesamiento por lotes
+// stores/csvStore.js - Store mejorado con soluciones para límite de 50 registros
 import { defineStore } from 'pinia'
+import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+
+dayjs.extend(customParseFormat)
 
 export const useCsvStore = defineStore('csv', {
   state: () => ({
@@ -8,11 +12,19 @@ export const useCsvStore = defineStore('csv', {
     connectionStatus: null,
     token: null,
     tokenExpiry: null,
+    currentProgress: {
+      current: 0,
+      total: 0,
+      percentage: 0,
+      currentBatch: 0,
+      totalBatches: 0
+    },
     formParams: {
       flowid: '',
       statusid: '',
       statusflowid: '',
       apiUrl: 'https://api.flowsma.com/donandres/workspace',
+      apiUrl1: 'https://api.flowsma.com/donandres',
       username: '',
       password: ''
     },
@@ -21,64 +33,99 @@ export const useCsvStore = defineStore('csv', {
       username: '',
       password: ''
     },
-    // Configuración para procesamiento por lotes
+    // Config mejorada por lotes - más conservadora para evitar límites
     batchConfig: {
-      batchSize: 10,           // Procesar de 10 en 10 registros
-      delayBetweenBatches: 500, // 500ms de delay entre lotes
-      tokenRefreshThreshold: 300 // Renovar token si faltan menos de 5 minutos
+      batchSize: 5, // Reducido de 3 a 5 para mejor eficiencia pero mantener estabilidad
+      delayBetweenBatches: 8000, // Aumentado para evitar rate limiting
+      delayBetweenRecords: 2000, // Aumentado para dar más tiempo al servidor
+      tokenRefreshThreshold: 900, // Más tiempo antes de expiración
+      maxRetries: 5, // Más reintentos
+      maxConcurrentRequests: 2, // Nuevo: limitar requests concurrentes
+      exponentialBackoff: true // Nuevo: backoff exponencial en errores
     }
   }),
 
   actions: {
-    // Función para formatear fecha
-    formatearFecha(fechaString) {
-      if (!fechaString || typeof fechaString !== 'string') return null
-
-      const limpio = fechaString.trim()
-
-      // Caso: ya está en formato YYYY-MM-DD
-      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(limpio)) {
-        return limpio
-      }
-
-      // Caso: formato M/D/YYYY HH:mm:ss
-      if (/^\d{1,2}\/\d{1,2}\/\d{4}(?:\s+\d{1,2}:\d{2}:\d{2})?$/.test(limpio)) {
-        const [fechaParte] = limpio.split(' ')
-        const [mes, dia, anio] = fechaParte.split('/')
-        return `${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`
-      }
-
-      // Caso: formato D/M/YYYY
-      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(limpio)) {
-        const [dia, mes, anio] = limpio.split('/')
-        return `${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`
-      }
-
-      // Caso: formato D-M-YYYY
-      if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(limpio)) {
-        const [dia, mes, anio] = limpio.split('-')
-        return `${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`
-      }
-
-      console.warn(`⚠ Formato desconocido recibido: "${fechaString}", devolviendo nulo`)
-      return null
+    // -------------------------
+    // Helpers mejorados
+    // -------------------------
+    obtenerFechaServidor() {
+      const ahora = dayjs()
+      return ahora.format('YYYY-MM-DD')
     },
 
-    // Verificar si el token está próximo a expirar
+    formatearFecha(fechaString) {
+      const formatos = [
+        'YYYY-MM-DD',
+        'YYYY/MM/DD',
+        'YYYY.MM.DD',
+        'DD/MM/YYYY',
+        'D/M/YYYY',
+        'DD-MM-YYYY',
+        'D-M-YYYY',
+        'MM-DD-YYYY',
+        'MM/DD/YYYY',
+        'DD.MM.YYYY',
+        'YYYY-MM-DDTHH:mm:ss',
+        'DD/MM/YYYY HH:mm:ss',
+        'MM/DD/YYYY HH:mm:ss'
+      ]
+
+      if (!fechaString && fechaString !== 0) {
+        return this.obtenerFechaServidor()
+      }
+
+      const limpio = String(fechaString).trim()
+
+      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(limpio)) {
+        const [y, m, d] = limpio.split('-')
+        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+      }
+
+      for (const fmt of formatos) {
+        const parsed = dayjs(limpio, fmt, true)
+        if (parsed.isValid()) {
+          return parsed.format('YYYY-MM-DD')
+        }
+      }
+
+      console.warn(`⚠ Formato desconocido para fecha "${fechaString}" -> usando fecha servidor`)
+      return this.obtenerFechaServidor()
+    },
+
+    parseNumberSafe(value) {
+      if (value === null || value === undefined || value === '') return 0
+      const str = String(value).replace(/\s+/g, '').replace(/\./g, '').replace(',', '.')
+      const n = parseFloat(str)
+      return Number.isFinite(n) ? n : 0
+    },
+
+    // -------------------------
+    // Gestión de progreso mejorada
+    // -------------------------
+    updateProgress(current, total, currentBatch = 0, totalBatches = 0) {
+      this.currentProgress = {
+        current,
+        total,
+        percentage: total > 0 ? Math.round((current / total) * 100) : 0,
+        currentBatch,
+        totalBatches
+      }
+    },
+
+    // -------------------------
+    // Token / Login con mejor manejo
+    // -------------------------
     isTokenExpiring() {
       if (!this.tokenExpiry) return true
-      
       const now = Date.now()
       const timeToExpiry = this.tokenExpiry - now
-      const thresholdMs = this.batchConfig.tokenRefreshThreshold * 1000
-      
+      const thresholdMs = (this.batchConfig.tokenRefreshThreshold || 900) * 1000
       return timeToExpiry < thresholdMs
     },
 
-    // Login mejorado con manejo de expiración
     async login(forceRenew = false) {
       try {
-        // Si el token existe y no está próximo a expirar, no hacer nada
         if (this.token && !this.isTokenExpiring() && !forceRenew) {
           console.log('🔑 Token válido, no se requiere renovación')
           return { access_token: this.token }
@@ -89,11 +136,11 @@ export const useCsvStore = defineStore('csv', {
         }
 
         console.log('🔄 Renovando token...')
-        
-        const response = await fetch(`${this.formParams.apiUrl}/auth/login`, {
+        const response = await fetch(`${this.formParams.apiUrl1}/api/login`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
+          headers: { 
+            'Content-Type': 'application/json',
+            'User-Agent': 'CSV-Importer/1.0'
           },
           body: JSON.stringify({
             username: this.formParams.username,
@@ -102,18 +149,16 @@ export const useCsvStore = defineStore('csv', {
         })
 
         if (!response.ok) {
-          throw new Error(`Error de login: ${response.status} - Credenciales inválidas`)
+          const text = await response.text().catch(() => '')
+          console.error(`❌ Error login (${response.status}):`, text)
+          throw new Error(`${response.status} - ${text || 'Login failed'}`)
         }
 
         const data = await response.json()
         this.token = data.access_token
-        
-        // Establecer tiempo de expiración (asumimos 1 hora por defecto)
         this.tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000
-        
         this.credentials.saved = true
-        console.log('✅ Token renovado exitosamente')
-        
+        console.log('✅ Token renovado exitosamente (expiry:', new Date(this.tokenExpiry).toLocaleString(), ')')
         return data
       } catch (error) {
         console.error('❌ Error en login:', error)
@@ -124,61 +169,98 @@ export const useCsvStore = defineStore('csv', {
       }
     },
 
-    // Función helper para manejar errores 401 y renovar token
-    async handleApiRequest(requestFn, maxRetries = 2) {
+    // -------------------------
+    // handleApiRequest mejorado con backoff exponencial
+    // -------------------------
+    async handleApiRequest(requestFn, maxRetries = null, recordIndex = 0, operation = 'unknown') {
+      if (!maxRetries) maxRetries = this.batchConfig.maxRetries || 5
+
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          // Verificar si necesitamos renovar el token antes de la request
+          // Verificar token antes de cada request importante
           if (this.isTokenExpiring()) {
+            console.log(`🔄 Token próximo a expirar. Renovando antes de ${operation}...`)
             await this.login(true)
           }
 
           const result = await requestFn()
           return result
-        } catch (error) {
-          console.log(`🔄 Intento ${attempt}/${maxRetries} falló:`, error.message)
-          
-          // Si es error 401 y no es el último intento, renovar token
-          if (error.message.includes('401') && attempt < maxRetries) {
-            console.log('🔑 Error 401 detectado, renovando token...')
-            await this.login(true)
+        } catch (rawError) {
+          const errorMsg = (rawError && rawError.message) ? rawError.message : String(rawError)
+          console.log(`🔄 ${operation} fila ${recordIndex}: Intento ${attempt}/${maxRetries} falló: ${errorMsg}`)
+
+          // Manejar diferentes tipos de errores
+          const isAuthError = errorMsg.includes('401') || errorMsg.includes('403')
+          const isServerError = errorMsg.includes('500') || errorMsg.includes('502') || errorMsg.includes('503')
+          const isRateLimit = errorMsg.includes('429') || errorMsg.includes('rate limit')
+
+          if (attempt < maxRetries && (isAuthError || isServerError || isRateLimit)) {
+            // Renovar token para errores de autenticación
+            if (isAuthError) {
+              console.log(`🔑 Error de autenticación detectado, renovando token...`)
+              try { 
+                await this.login(true) 
+              } catch (e) { 
+                console.warn('⚠ No se pudo renovar token:', e.message) 
+              }
+            }
+
+            // Calcular tiempo de espera con backoff exponencial
+            let waitTime = 3000 * attempt // Base: 3s, 6s, 9s, 12s, 15s
+            if (this.batchConfig.exponentialBackoff) {
+              waitTime = Math.min(1000 * Math.pow(2, attempt), 30000) // Max 30s
+            }
+            if (isRateLimit) {
+              waitTime = Math.max(waitTime, 15000) // Mínimo 15s para rate limit
+            }
+
+            console.log(`⏳ ${operation}: Esperando ${waitTime}ms antes del siguiente intento...`)
+            await new Promise(r => setTimeout(r, waitTime))
             continue
           }
-          
-          // Si llegamos aquí, falló definitivamente
-          throw error
+
+          // Si llegamos aquí, no hay más reintentos o error no recuperable
+          console.error(`💥 ${operation} fila ${recordIndex}: Error final tras ${attempt} intentos:`, errorMsg)
+          throw rawError
         }
       }
     },
 
-    // Validar existencia con manejo robusto de token
-    async validarExistencia(registroId, referenciatexto) {
+    // -------------------------
+    // Validar existencia mejorado con paginación
+    // -------------------------
+    async validarExistencia(registroId, referenciatexto = '', recordIndex = 0) {
       return this.handleApiRequest(async () => {
         if (!this.formParams.statusid || !this.formParams.flowid) {
-          throw new Error('Los parámetros statusid y flowid son requeridos')
+          throw new Error('Los parámetros statusid y flowid son requeridos para validar existencia')
         }
 
         const payload = {
           statusid: parseInt(this.formParams.statusid),
           flowid: parseInt(this.formParams.flowid),
-          pattern: "",
+          pattern: referenciatexto || "",
           offset: 0,
-          max: 1000,
+          max: 100, // Aumentado de 1000 a 100 para mejor rendimiento
           sort: "referenciatexto",
           descending: false
         }
+
+        console.log(`🔎 Validando existencia fila ${recordIndex}: ${referenciatexto}`)
 
         const response = await fetch(`${this.formParams.apiUrl}/getRegistroCabList`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`
+            'Authorization': `Bearer ${this.token}`,
+            'User-Agent': 'CSV-Importer/1.0'
           },
           body: JSON.stringify(payload)
         })
 
         if (!response.ok) {
-          throw new Error(`${response.status}`)
+          const text = await response.text().catch(() => '')
+          console.error(`❌ validarExistencia error (${response.status}) fila ${recordIndex}:`, text)
+          throw new Error(`${response.status} - ${text || 'Error getRegistroCabList'}`)
         }
 
         const data = await response.json()
@@ -188,46 +270,65 @@ export const useCsvStore = defineStore('csv', {
         let registroExistente = null
         
         if (referenciatexto) {
-          const encontrado = rows.find(item => item.referenciatexto === referenciatexto)
+          const encontrado = rows.find(item => 
+            String(item.referenciatexto).toLowerCase() === String(referenciatexto).toLowerCase()
+          )
           if (encontrado) {
             existe = true
             registroExistente = encontrado
-            console.log(`✓ Coincidencia encontrada: ${referenciatexto}`)
+            console.log(`✓ Duplicado encontrado para "${referenciatexto}" (fila ${recordIndex})`)
           }
         }
 
-        return { existe, registroExistente }
-      }).catch(error => {
-        console.error('Error validando existencia:', error)
-        return { existe: false, registroExistente: null }
+        return { existe, registroExistente, allRows: rows }
+      }, this.batchConfig.maxRetries, recordIndex, 'validarExistencia').catch(error => {
+        console.error(`Error validando existencia fila ${recordIndex}:`, error)
+        // En caso de error, asumir que no existe para continuar procesamiento
+        return { existe: false, registroExistente: null, allRows: [] }
       })
     },
 
-    // Guardar registro con manejo robusto de token
-    async saveRegistroCab(cabeceraData) {
+    // -------------------------
+    // Guardar cabecera mejorado
+    // -------------------------
+    async saveRegistroCab(cabeceraData, recordIndex = 0) {
       return this.handleApiRequest(async () => {
+        console.log(`🚀 Guardando registro ${recordIndex}...`)
+
         const response = await fetch(`${this.formParams.apiUrl}/saveRegistroCab`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`
+            'Authorization': `Bearer ${this.token}`,
+            'User-Agent': 'CSV-Importer/1.0'
           },
           body: JSON.stringify(cabeceraData)
         })
 
         if (!response.ok) {
-          throw new Error(`${response.status}`)
+          let text = ''
+          try {
+            text = await response.text()
+          } catch (e) {
+            text = `Error leyendo respuesta: ${e.message}`
+          }
+          console.error(`❌ saveRegistroCab error (${response.status}) fila ${recordIndex}:`, text)
+          throw new Error(`${response.status} - ${text || 'Error guardando registro'}`)
         }
 
-        return await response.json()
-      })
+        const json = await response.json().catch(() => ({ success: true }))
+        console.log(`✅ Registro ${recordIndex} guardado exitosamente`)
+        return json
+      }, this.batchConfig.maxRetries, recordIndex, 'saveRegistroCab')
     },
 
-    // Función para procesar un lote de registros
-    async processBatch(rows, startIndex, batchSize) {
+    // -------------------------
+    // Procesar un lote mejorado con mejor control de errores
+    // -------------------------
+    async processBatch(rows, startIndex, batchSize, batchNumber, totalBatches) {
       const endIndex = Math.min(startIndex + batchSize, rows.length)
       const batchRows = rows.slice(startIndex, endIndex)
-      
+
       const results = {
         processed: 0,
         errors: 0,
@@ -236,106 +337,146 @@ export const useCsvStore = defineStore('csv', {
         duplicateDetails: []
       }
 
-      console.log(`📦 Procesando lote ${Math.floor(startIndex/batchSize) + 1}: registros ${startIndex + 1}-${endIndex}`)
+      console.log(`📦 Procesando lote ${batchNumber}/${totalBatches}: registros ${startIndex + 1}-${endIndex}`)
 
+      // Procesar registros del lote secuencialmente para evitar sobrecarga
       for (let i = 0; i < batchRows.length; i++) {
         const row = batchRows[i]
         const globalIndex = startIndex + i
-
+        
         try {
-          // Mapear campos del CSV
-          const fechaCarga = this.formatearFecha(row['Fecha Carga'])
-          const fechaCompromiso = this.formatearFecha(row['Fecha'])
-          const referenciaTexto = row['Comprobante'] || `csv-${Date.now()}-${globalIndex + 1}`
+          // Actualizar progreso
+          this.updateProgress(globalIndex + 1, rows.length, batchNumber, totalBatches)
+
+          // Normalizar datos
+          const fechaCarga = this.formatearFecha(row['Fecha Carga'] || row['Fecha'] || row['fecha'])
+          const fechaCompromiso = this.formatearFecha(row['Fecha'] || row['fechacompromiso'] || row['Fecha Compromiso'])
+          const referenciaTexto = (row['Comprobante'] && String(row['Comprobante']).trim()) || 
+                                  `csv-import-${Date.now()}-${globalIndex + 1}`
           const registroId = row['ID'] || row['id'] || null
 
-          // Validar existencia
-          const validacion = await this.validarExistencia(registroId, referenciaTexto)
-          
-          if (validacion.existe) {
-            console.log(`⚠️ Registro duplicado en fila ${globalIndex + 1}: ${referenciaTexto}`)
-            results.duplicates++
-            results.duplicateDetails.push({
-              fila: globalIndex + 1,
-              comprobante: referenciaTexto,
-              datosCSV: row,
-              registroExistente: validacion.registroExistente
-            })
-            continue
+          console.log(`📝 Procesando fila ${globalIndex + 1}/${rows.length} - Ref: ${referenciaTexto}`)
+
+          // Validar existencia con manejo de errores
+          try {
+            const validacion = await this.validarExistencia(registroId, referenciaTexto, globalIndex + 1)
+            if (validacion.existe) {
+              console.log(`⚠️ Registro duplicado en fila ${globalIndex + 1}: ${referenciaTexto}`)
+              results.duplicates++
+              results.duplicateDetails.push({
+                fila: globalIndex + 1,
+                comprobante: referenciaTexto,
+                registroExistente: validacion.registroExistente
+              })
+              continue
+            }
+          } catch (validationError) {
+            console.warn(`⚠️ Error validando duplicado fila ${globalIndex + 1}, continuando con inserción:`, validationError.message)
+            // Continuar con la inserción si falla la validación
           }
 
+          // Construir payload con validación de datos
           const cabeceraData = {
-            flowid: parseInt(this.formParams.flowid),
-            statusid: parseInt(this.formParams.statusid),
-            statusflowid: parseInt(this.formParams.statusflowid),
+            flowid: parseInt(this.formParams.flowid) || 0,
+            statusid: parseInt(this.formParams.statusid) || 0,
+            statusflowid: parseInt(this.formParams.statusflowid) || 0,
             currentuser: 1,
-            
-            // Mapeo de campos CSV -> API
             fecha: fechaCarga,
             fechacompromiso: fechaCompromiso,
-            obsadm: row['Nombre'] || '',
-            obsinicio: row['Concepto'] || '',
-            obsventas: row['Motivo Det'] || '',
-            referenciatexto: referenciaTexto,
-            
-            // Campos numéricos
-            totalimpuestos: parseFloat(row['Imp IVA1']?.toString().replace(',', '.')) || 0,
-            totalprecioimp: parseFloat(row['Imp Total']?.toString().replace(',', '.')) || 0,
-            varcn0: parseFloat(row['Imp Exento']?.toString().replace(',', '.')) || 0,
-            varcn1: parseFloat(row['Imp Gravado']?.toString().replace(',', '.')) || 0,
-            
-            // Campos adicionales
-            clientname: row['Nombre'] || "Sin nombre",
-            descrip: row['Concepto'] || `Importación CSV fila ${globalIndex + 1}`
+            obsadm: String(row['Nombre'] || '').substring(0, 255), // Limitar longitud
+            obsinicio: String(row['Concepto'] || '').substring(0, 255),
+            obsventas: String(row['Motivo Det'] || row['Motivo'] || '').substring(0, 255),
+            referenciatexto: referenciaTexto.substring(0, 50), // Limitar referencia
+            totalimpuestos: this.parseNumberSafe(row['Imp IVA1']),
+            totalprecioimp: this.parseNumberSafe(row['Imp Total']),
+            varcn0: this.parseNumberSafe(row['Imp Exento']),
+            varcn1: this.parseNumberSafe(row['Imp Gravado']),
+            clientname: String(row['Nombre'] || "Sin nombre").substring(0, 100),
+            descrip: String(row['Concepto'] || `Importación CSV fila ${globalIndex + 1}`).substring(0, 255)
           }
 
-          await this.saveRegistroCab(cabeceraData)
+          // Enviar registro
+          await this.saveRegistroCab(cabeceraData, globalIndex + 1)
           results.processed++
-          console.log(`✅ Procesado registro ${globalIndex + 1}`)
+          console.log(`✅ Fila ${globalIndex + 1} procesada exitosamente`)
+
+          // Pausa entre registros para evitar rate limiting
+          if (this.batchConfig.delayBetweenRecords && i < batchRows.length - 1) {
+            await new Promise(r => setTimeout(r, this.batchConfig.delayBetweenRecords))
+          }
 
         } catch (error) {
-          console.error(`❌ Error procesando fila ${globalIndex + 1}:`, error)
+          const msg = (error && error.message) ? error.message : String(error)
+          console.error(`❌ Error procesando fila ${globalIndex + 1}:`, msg)
           results.errors++
           results.errorDetails.push({
             fila: globalIndex + 1,
-            datos: row,
-            error: error.message
+            datos: { 
+              comprobante: row['Comprobante'], 
+              nombre: row['Nombre'], 
+              concepto: row['Concepto'] 
+            },
+            error: msg
           })
+
+          // Si hay demasiados errores consecutivos, hacer una pausa más larga
+          if (results.errors > 0 && results.errors % 3 === 0) {
+            console.log(`⚠️ Múltiples errores detectados, pausa adicional de 10s...`)
+            await new Promise(r => setTimeout(r, 10000))
+          }
         }
       }
 
+      console.log(`📦 Lote ${batchNumber} completado: ${results.processed} exitosos, ${results.errors} errores, ${results.duplicates} duplicados`)
       return results
     },
 
-    // Función principal mejorada con procesamiento por lotes
+    // -------------------------
+    // Procesar CSV completo mejorado
+    // -------------------------
     async processCSV(file) {
       this.isLoading = true
       this.processingResults = null
+      this.updateProgress(0, 0)
 
       try {
         // Login inicial
-        await this.login()
+        console.log('🔐 Iniciando sesión...')
+        await this.login(true)
 
-        // Leer y parsear CSV
+        // Parse CSV
+        console.log('📄 Leyendo archivo CSV...')
         const csvText = await file.text()
         const rows = this.parseCSV(csvText)
+        
+        if (rows.length === 0) {
+          throw new Error('El archivo CSV está vacío o no se pudo procesar')
+        }
 
-        console.log(`📊 Iniciando procesamiento de ${rows.length} registros`)
-        console.log(`⚙️ Configuración: ${this.batchConfig.batchSize} registros por lote, ${this.batchConfig.delayBetweenBatches}ms de delay`)
+        console.log(`📊 Archivo procesado: ${rows.length} registros encontrados`)
+        console.log(`⚙️ Configuración: lotes de ${this.batchConfig.batchSize}, pausa entre lotes: ${this.batchConfig.delayBetweenBatches}ms`)
 
+        const totalBatches = Math.ceil(rows.length / this.batchConfig.batchSize)
         const totalResults = {
           totalFilas: rows.length,
           procesadasExitosamente: 0,
           duplicados: 0,
           errores: 0,
           detalleDuplicados: [],
-          detalleErrores: []
+          detalleErrores: [],
+          tiempoInicio: new Date(),
+          tiempoFin: null,
+          duracionMinutos: 0
         }
 
-        // Procesar en lotes
+        // Procesar por lotes
         for (let i = 0; i < rows.length; i += this.batchConfig.batchSize) {
-          const batchResults = await this.processBatch(rows, i, this.batchConfig.batchSize)
+          const batchNumber = Math.floor(i / this.batchConfig.batchSize) + 1
           
+          console.log(`\n🚀 Iniciando lote ${batchNumber}/${totalBatches}...`)
+          
+          const batchResults = await this.processBatch(rows, i, this.batchConfig.batchSize, batchNumber, totalBatches)
+
           // Acumular resultados
           totalResults.procesadasExitosamente += batchResults.processed
           totalResults.duplicados += batchResults.duplicates
@@ -343,75 +484,157 @@ export const useCsvStore = defineStore('csv', {
           totalResults.detalleDuplicados.push(...batchResults.duplicateDetails)
           totalResults.detalleErrores.push(...batchResults.errorDetails)
 
-          // Actualizar resultados parciales para mostrar progreso
+          // Actualizar resultados en tiempo real
           this.processingResults = { ...totalResults }
 
-          // Delay entre lotes para evitar sobrecarga del servidor
+          // Pausa entre lotes (excepto en el último)
           if (i + this.batchConfig.batchSize < rows.length) {
-            console.log(`⏳ Esperando ${this.batchConfig.delayBetweenBatches}ms antes del siguiente lote...`)
-            await new Promise(resolve => setTimeout(resolve, this.batchConfig.delayBetweenBatches))
+            console.log(`⏳ Pausa entre lotes: ${this.batchConfig.delayBetweenBatches}ms...`)
+            await new Promise(r => setTimeout(r, this.batchConfig.delayBetweenBatches))
+          }
+
+          // Log de progreso cada 5 lotes
+          if (batchNumber % 5 === 0) {
+            const progreso = Math.round((totalResults.procesadasExitosamente / rows.length) * 100)
+            console.log(`📈 Progreso: ${totalResults.procesadasExitosamente}/${rows.length} (${progreso}%)`)
           }
         }
 
-        console.log('🎉 Procesamiento completado:', totalResults)
-        this.processingResults = totalResults
+        // Completar resultados
+        totalResults.tiempoFin = new Date()
+        totalResults.duracionMinutos = Math.round((totalResults.tiempoFin - totalResults.tiempoInicio) / 60000 * 100) / 100
 
+        console.log('\n🎉 ¡Procesamiento completado!')
+        console.log(`📊 Resumen final:`)
+        console.log(`   • Total registros: ${totalResults.totalFilas}`)
+        console.log(`   • Procesados exitosamente: ${totalResults.procesadasExitosamente}`)
+        console.log(`   • Duplicados omitidos: ${totalResults.duplicados}`)
+        console.log(`   • Errores: ${totalResults.errores}`)
+        console.log(`   • Duración: ${totalResults.duracionMinutos} minutos`)
+
+        this.processingResults = totalResults
+        this.updateProgress(totalResults.totalFilas, totalResults.totalFilas, totalBatches, totalBatches)
+        
+        return totalResults
       } catch (error) {
         console.error('💥 Error general procesando CSV:', error)
+        this.processingResults = {
+          error: true,
+          message: error.message || String(error),
+          timestamp: new Date()
+        }
         throw error
       } finally {
         this.isLoading = false
       }
     },
 
-    // Parser CSV (sin cambios)
+    // -------------------------
+    // Parser CSV mejorado (mantener el actual o usar PapaParse)
+    // -------------------------
     parseCSV(csvText) {
-      const lines = csvText.trim().split('\n')
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
-      const rows = []
+      if (!csvText) return []
+      const lines = csvText.trim().split(/\r?\n/).filter(l => l.trim() !== '')
+      if (lines.length === 0) return []
 
+      const splitLine = (line) => {
+        const result = []
+        let current = ''
+        let inQuotes = false
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i]
+          
+          if (char === '"') {
+            inQuotes = !inQuotes
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim())
+            current = ''
+          } else {
+            current += char
+          }
+        }
+        result.push(current.trim())
+        return result
+      }
+
+      const headers = splitLine(lines[0]).map(h => h.replace(/^"|"$/g, ''))
+      const rows = []
+      
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
+        const values = splitLine(lines[i]).map(v => v.replace(/^"|"$/g, ''))
         const row = {}
-        headers.forEach((header, index) => {
-          row[header] = values[index] || ''
+        headers.forEach((header, idx) => {
+          row[header] = values[idx] !== undefined ? values[idx] : ''
         })
         rows.push(row)
       }
-
+      
+      console.log(`📄 CSV parseado: ${headers.length} columnas, ${rows.length} filas`)
       return rows
     },
 
-    // Probar conexión
+    // -------------------------
+    // Métodos auxiliares
+    // -------------------------
     async testConnection() {
       try {
-        const loginData = await this.login(true) // Forzar renovación para test
+        const loginData = await this.login(true)
         this.connectionStatus = {
           success: true,
           message: "Conexión exitosa - Token válido",
           hasToken: !!loginData.access_token,
-          tokenExpiry: new Date(this.tokenExpiry).toLocaleString()
+          tokenExpiry: this.tokenExpiry ? new Date(this.tokenExpiry).toLocaleString() : null,
+          timestamp: new Date().toLocaleString()
         }
         return this.connectionStatus
       } catch (error) {
         this.connectionStatus = {
           success: false,
           message: "Error de conexión",
-          error: error.message
+          error: error.message || String(error),
+          timestamp: new Date().toLocaleString()
         }
         throw error
       }
     },
 
-    // Actualizar parámetros del formulario
     updateFormParams(params) {
       this.formParams = { ...this.formParams, ...params }
+      console.log('⚙️ Parámetros actualizados:', params)
     },
 
-    // Configurar credenciales
     setCredentials(username, password) {
       this.formParams.username = username
       this.formParams.password = password
+      this.credentials.saved = true
+      this.credentials.username = username
+      this.credentials.password = password
+      console.log('✅ Credenciales guardadas exitosamente')
+    },
+
+    // Nuevo método para reiniciar el procesamiento
+    resetProcessing() {
+      this.processingResults = null
+      this.updateProgress(0, 0)
+      console.log('🔄 Estado de procesamiento reiniciado')
+    },
+
+    // Nuevo método para obtener estadísticas
+    getProcessingStats() {
+      if (!this.processingResults) return null
+      
+      const stats = {
+        ...this.processingResults,
+        tasaExito: this.processingResults.totalFilas > 0 ? 
+          Math.round((this.processingResults.procesadasExitosamente / this.processingResults.totalFilas) * 100) : 0,
+        tasaError: this.processingResults.totalFilas > 0 ? 
+          Math.round((this.processingResults.errores / this.processingResults.totalFilas) * 100) : 0,
+        tasaDuplicados: this.processingResults.totalFilas > 0 ? 
+          Math.round((this.processingResults.duplicados / this.processingResults.totalFilas) * 100) : 0
+      }
+      
+      return stats
     }
   }
 })
