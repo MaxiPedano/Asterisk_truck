@@ -286,7 +286,7 @@ export const useCsvStore = defineStore('csv', {
           flowid: parseInt(this.formParams.flowid),
           pattern: referenciatexto || "",
           offset: 0,
-          max: 50, // Reducido para mejor rendimiento
+          max: 500, // Reducido para mejor rendimiento
           sort: "referenciatexto",
           descending: false
         }
