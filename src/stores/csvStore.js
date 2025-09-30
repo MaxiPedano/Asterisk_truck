@@ -165,21 +165,26 @@ export const useCsvStore = defineStore('csv', {
     },
 
     parseNumberSafe(value) {
-      if (value === null || value === undefined || value === '') return 0
-      const str = String(value).replace(/\s+/g, '').replace(/\./g, '').replace(',', '.')
-      const n = parseFloat(str)
-      return Number.isFinite(n) ? n : 0
-    },
-
-    updateProgress(current, total, currentBatch = 0, totalBatches = 0) {
-      this.currentProgress = {
-        current,
-        total,
-        percentage: total > 0 ? Math.round((current / total) * 100) : 0,
-        currentBatch,
-        totalBatches
-      }
-    },
+  if (value === null || value === undefined || value === '') return 0
+  
+  const str = String(value).replace(/\s+/g, '')
+  
+  // Detectar formato según el último separador
+  const lastComma = str.lastIndexOf(',')
+  const lastDot = str.lastIndexOf('.')
+  
+  let cleanStr
+  if (lastComma > lastDot) {
+    // Formato europeo: 8.224.514,75
+    cleanStr = str.replace(/\./g, '').replace(',', '.')
+  } else {
+    // Formato americano: 8,224,514.75
+    cleanStr = str.replace(/,/g, '')
+  }
+  
+  const n = parseFloat(cleanStr)
+  return Number.isFinite(n) ? n : 0
+},
 
     // -------------------------
     // Token Management
