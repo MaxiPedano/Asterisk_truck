@@ -9,13 +9,12 @@
 
     <v-main>
       <div class="bg-grey-lighten-4 min-h-screen py-8">
-        <CSVImportForm />
+        <VHome />
       </div>
     </v-main>
   </v-app>
 </template>
 
 <script setup>
-import CSVImportForm from './components/csvImportForm.vue'
+import VHome from "./components/VHome.vue";
 </script>
-

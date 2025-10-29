@@ -1,19 +1,28 @@
 // composables/useCSV.js
-import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useCsvStore } from '@/stores/csvStore'
 
 export function useCSV() {
   const csvStore = useCsvStore()
 
-  return {
-    // State
-    isLoading: computed(() => csvStore.isLoading),
-    processingResults: computed(() => csvStore.processingResults),
-    connectionStatus: computed(() => csvStore.connectionStatus),
-    formParams: computed(() => csvStore.formParams),
-    credentials: computed(() => csvStore.credentials),
+  // storeToRefs convierte el estado en refs reactivas automáticamente
+  const {
+    isLoading,
+    processingResults,
+    connectionStatus,
+    formParams,
+    credentials
+  } = storeToRefs(csvStore)
 
-    // Actions (con wrapper para no perder el this del store)
+  return {
+    // State (ya son refs, no computed)
+    isLoading,
+    processingResults,
+    connectionStatus,
+    formParams,
+    credentials,
+
+    // Actions
     processCSV: (...args) => csvStore.processCSV(...args),
     testConnection: (...args) => csvStore.testConnection(...args),
     updateFormParams: (...args) => csvStore.updateFormParams(...args),

@@ -3,54 +3,16 @@
     <v-row justify="center">
       <v-col cols="12" md="8" lg="6">
         <!-- Sección de credenciales -->
-        <v-card elevation="2" class="mb-4" v-if="!credentials.saved">
-          <v-card-title class="d-flex align-center">
-            <v-icon class="mr-3" color="warning">mdi-key</v-icon>
-            <span class="text-h6">Credenciales de Acceso</span>
-          </v-card-title>
-          <v-card-text>
-            <v-alert type="info" variant="tonal" class="mb-4">
-              Ingresa tus credenciales para acceder a la API
-            </v-alert>
-            <v-row>
-              <v-col cols="12" md="6">
-                <v-text-field
-                  v-model="authForm.username"
-                  label="Usuario"
-                  prepend-icon="mdi-account"
-                  variant="outlined"
-                  :rules="[rules.required]"
-                />
-              </v-col>
-              <v-col cols="12" md="6">
-                <v-text-field
-                  v-model="authForm.password"
-                  label="Contraseña"
-                  type="password"
-                  prepend-icon="mdi-lock"
-                  variant="outlined"
-                  :rules="[rules.required]"
-                />
-              </v-col>
-            </v-row>
-            <v-btn 
-              @click="saveCredentials"
-              color="primary"
-              :disabled="!authForm.username || !authForm.password"
-              prepend-icon="mdi-check"
-            >
-              Guardar Credenciales
-            </v-btn>
-          </v-card-text>
-        </v-card>
-
+        <CredentialsForm />
         <!-- Instrucciones de Uso -->
         <v-card elevation="2" class="mb-6">
           <v-card-title class="d-flex align-center py-4">
-            <v-icon class="mr-3" size="large" color="info">mdi-clipboard-text-outline</v-icon>
+            <v-icon class="mr-3" size="large" color="info"
+              >mdi-clipboard-text-outline</v-icon
+            >
             <span class="text-h5">Instrucciones de Uso</span>
           </v-card-title>
-          
+
           <v-card-text>
             <v-list density="compact">
               <v-list-item>
@@ -60,7 +22,8 @@
                   </v-avatar>
                 </template>
                 <v-list-item-title class="text-body-1">
-                  Selecciona un archivo CSV con los datos a importar desde tu computadora.
+                  Selecciona un archivo CSV con los datos a importar desde tu
+                  computadora.
                 </v-list-item-title>
               </v-list-item>
 
@@ -71,28 +34,31 @@
                   </v-avatar>
                 </template>
                 <v-list-item-title class="text-body-1 mb-3">
-                  Completa los campos requeridos con los valores correspondientes:
+                  Completa los campos requeridos con los valores
+                  correspondientes:
                 </v-list-item-title>
                 <div class="ml-8">
-                  <v-alert 
-                    variant="tonal" 
-                    color="success" 
-                    density="compact" 
+                  <v-alert
+                    variant="tonal"
+                    color="success"
+                    density="compact"
                     class="mb-2"
                     icon="mdi-shopping"
                   >
                     <div class="text-body-2">
-                      <strong>COMPRAS B:</strong> FLOWID: 11079 | STATUSFLOW: 774 | STATUSID: 1692
+                      <strong>COMPRAS B:</strong> FLOWID: 11079 | STATUSFLOW:
+                      774 | STATUSID: 1692
                     </div>
                   </v-alert>
-                  <v-alert 
-                    variant="tonal" 
-                    color="info" 
+                  <v-alert
+                    variant="tonal"
+                    color="info"
                     density="compact"
                     icon="mdi-shopping-outline"
                   >
                     <div class="text-body-2">
-                      <strong>COMPRAS A:</strong> FLOWID: 11080 | STATUSFLOW: 776 | STATUSID: 1711
+                      <strong>COMPRAS A:</strong> FLOWID: 11080 | STATUSFLOW:
+                      776 | STATUSID: 1711
                     </div>
                   </v-alert>
                 </div>
@@ -105,7 +71,8 @@
                   </v-avatar>
                 </template>
                 <v-list-item-title class="text-body-1">
-                  Verifica que todos los campos obligatorios estén completos antes de continuar.
+                  Verifica que todos los campos obligatorios estén completos
+                  antes de continuar.
                 </v-list-item-title>
               </v-list-item>
 
@@ -116,7 +83,8 @@
                   </v-avatar>
                 </template>
                 <v-list-item-title class="text-body-1">
-                  Haz clic en "Importar CSV" para iniciar la importación de datos.
+                  Haz clic en "Importar CSV" para iniciar la importación de
+                  datos.
                 </v-list-item-title>
               </v-list-item>
 
@@ -127,7 +95,8 @@
                   </v-avatar>
                 </template>
                 <v-list-item-title class="text-body-1">
-                  Espera a que se complete el proceso. Los registros se procesarán en lotes de 10 para evitar desconexiones.
+                  Espera a que se complete el proceso. Los registros se
+                  procesarán en lotes de 10 para evitar desconexiones.
                 </v-list-item-title>
               </v-list-item>
             </v-list>
@@ -137,10 +106,12 @@
         <!-- Formulario Principal -->
         <v-card elevation="3" :disabled="!credentials.saved">
           <v-card-title class="text-h4 text-center py-6">
-            <v-icon left size="large" color="primary">mdi-file-table-outline</v-icon>
+            <v-icon left size="large" color="primary"
+              >mdi-file-table-outline</v-icon
+            >
             Importador de CSV
           </v-card-title>
-          
+
           <v-card-text>
             <v-form @submit.prevent="handleSubmit" ref="form">
               <!-- Parámetros del formulario -->
@@ -158,7 +129,7 @@
                     persistent-hint
                   />
                 </v-col>
-                
+
                 <v-col cols="12" md="4">
                   <v-text-field
                     v-model="localFormParams.statusid"
@@ -172,7 +143,7 @@
                     persistent-hint
                   />
                 </v-col>
-                
+
                 <v-col cols="12" md="4">
                   <v-text-field
                     v-model="localFormParams.statusflowid"
@@ -193,7 +164,9 @@
                 <v-col cols="12">
                   <v-card variant="outlined" color="grey-lighten-4">
                     <v-card-text>
-                      <div class="text-subtitle-2 mb-3">🚀 Configuración rápida:</div>
+                      <div class="text-subtitle-2 mb-3">
+                        🚀 Configuración rápida:
+                      </div>
                       <div class="d-flex flex-wrap gap-2">
                         <v-btn
                           size="small"
@@ -236,7 +209,9 @@
                     <template #append-inner>
                       <v-tooltip text="Selecciona un archivo CSV válido">
                         <template #activator="{ props }">
-                          <v-icon v-bind="props">mdi-help-circle-outline</v-icon>
+                          <v-icon v-bind="props"
+                            >mdi-help-circle-outline</v-icon
+                          >
                         </template>
                       </v-tooltip>
                     </template>
@@ -253,10 +228,14 @@
                     variant="tonal"
                   >
                     <template v-if="connectionStatus.error">
-                      <div class="text-caption mt-2">{{ connectionStatus.error }}</div>
+                      <div class="text-caption mt-2">
+                        {{ connectionStatus.error }}
+                      </div>
                     </template>
                     <template v-if="connectionStatus.tokenExpiry">
-                      <div class="text-caption mt-2">Token expira: {{ connectionStatus.tokenExpiry }}</div>
+                      <div class="text-caption mt-2">
+                        Token expira: {{ connectionStatus.tokenExpiry }}
+                      </div>
                     </template>
                   </v-alert>
                 </v-col>
@@ -275,18 +254,31 @@
                       />
                       <div class="text-h6">Procesando archivo CSV...</div>
                       <div class="text-body-2 mt-2">
-                        Los registros se procesan en lotes para evitar desconexiones
+                        Los registros se procesan en lotes para evitar
+                        desconexiones
                       </div>
                       <!-- Mostrar progreso si hay resultados parciales -->
                       <div v-if="processingResults" class="mt-4">
                         <v-progress-linear
-                          :model-value="(processingResults.procesadasExitosamente + processingResults.duplicados + processingResults.errores) / processingResults.totalFilas * 100"
+                          :model-value="
+                            ((processingResults.procesadasExitosamente +
+                              processingResults.duplicados +
+                              processingResults.errores) /
+                              processingResults.totalFilas) *
+                            100
+                          "
                           color="success"
                           height="6"
                           rounded
                         />
                         <div class="text-caption mt-2">
-                          Procesados: {{ processingResults.procesadasExitosamente + processingResults.duplicados + processingResults.errores }} / {{ processingResults.totalFilas }}
+                          Procesados:
+                          {{
+                            processingResults.procesadasExitosamente +
+                            processingResults.duplicados +
+                            processingResults.errores
+                          }}
+                          / {{ processingResults.totalFilas }}
                         </div>
                       </div>
                     </v-card-text>
@@ -310,7 +302,7 @@
                     Probar Conexión
                   </v-btn>
                 </v-col>
-                
+
                 <v-col cols="12" md="6">
                   <v-btn
                     type="submit"
@@ -331,105 +323,113 @@
         </v-card>
 
         <!-- Componente de resultados -->
-        <CSVResults v-if="processingResults && !isLoading" :results="processingResults" class="mt-6" />
+        <CSVResults
+          v-if="processingResults && !isLoading"
+          :results="processingResults"
+          class="mt-6"
+        />
       </v-col>
     </v-row>
   </v-container>
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
-import { useCSV } from '../composables/useCSV'
-import CSVResults from './csvResult.vue'
+import { ref, reactive, computed } from "vue";
+import { useCSV } from "../composables/useCSV";
+import CredentialsForm from "./VForm.vue";
+import CSVResults from "./csvResult.vue";
 
-const { 
-  isLoading, 
-  processingResults, 
+const {
+  isLoading,
+  processingResults,
   connectionStatus,
   credentials,
-  processCSV, 
-  testConnection: testConn, 
+  processCSV,
+  testConnection: testConn,
   updateFormParams,
-  setCredentials
-} = useCSV()
+  setCredentials,
+} = useCSV();
 
-const form = ref(null)
-const selectedFile = ref(null)
-const selectedFileArray = ref([])
+const form = ref(null);
+const selectedFile = ref(null);
+const selectedFileArray = ref([]);
 
 const localFormParams = reactive({
-  flowid: '',
-  statusid: '',
-  statusflowid: ''
-})
+  flowid: "",
+  statusid: "",
+  statusflowid: "",
+});
 
 const authForm = reactive({
-  username: '',
-  password: ''
-})
+  username: "",
+  password: "",
+});
 
 const rules = {
-  required: value => !!value || 'Este campo es requerido'
-}
+  required: (value) => !!value || "Este campo es requerido",
+};
 
 // Guardar credenciales
 function saveCredentials() {
   if (authForm.username && authForm.password) {
-    setCredentials(authForm.username, authForm.password)
+    setCredentials(authForm.username, authForm.password);
   }
 }
 
 // Funciones para configuración rápida
 function setComprasB() {
-  localFormParams.flowid = '11079'
-  localFormParams.statusid = '1692'
-  localFormParams.statusflowid = '774'
+  localFormParams.flowid = "11079";
+  localFormParams.statusid = "1692";
+  localFormParams.statusflowid = "774";
 }
 
 function setComprasA() {
-  localFormParams.flowid = '11080'
-  localFormParams.statusid = '1711'
-  localFormParams.statusflowid = '776'
+  localFormParams.flowid = "11080";
+  localFormParams.statusid = "1711";
+  localFormParams.statusflowid = "776";
 }
 
 function handleFileSelect() {
-  console.log('=== DEBUG FILE SELECT ===')
-  console.log('selectedFileArray.value:', selectedFileArray.value)
-  console.log('selectedFileArray.value[0]:', selectedFileArray.value[0])
-  const file = event.target?.files?.[0] || selectedFileArray.value?.[0] || null
-  selectedFile.value = file
-  console.log('selectedFile.value después:', selectedFile.value)
-  console.log('Botón debería estar:', selectedFile.value ? 'HABILITADO' : 'DESHABILITADO')
+  console.log("=== DEBUG FILE SELECT ===");
+  console.log("selectedFileArray.value:", selectedFileArray.value);
+  console.log("selectedFileArray.value[0]:", selectedFileArray.value[0]);
+  const file = event.target?.files?.[0] || selectedFileArray.value?.[0] || null;
+  selectedFile.value = file;
+  console.log("selectedFile.value después:", selectedFile.value);
+  console.log(
+    "Botón debería estar:",
+    selectedFile.value ? "HABILITADO" : "DESHABILITADO"
+  );
 }
 
 async function testConnection() {
   try {
-    await testConn()
+    await testConn();
   } catch (error) {
-    console.error('Error probando conexión:', error)
+    console.error("Error probando conexión:", error);
   }
 }
 
 async function handleSubmit() {
-  console.log('=== DEBUG IMPORTAR ===')
-  console.log('Form params:', localFormParams)
-  console.log('Selected file:', selectedFile.value)
-  console.log('Credentials saved:', credentials.value.saved)
+  console.log("=== DEBUG IMPORTAR ===");
+  console.log("Form params:", localFormParams);
+  console.log("Selected file:", selectedFile.value);
+  console.log("Credentials saved:", credentials.value.saved);
 
   if (!selectedFile.value || !credentials.value.saved) {
-    return
+    return;
   }
 
   // Actualizar parámetros en el store
-  updateFormParams(localFormParams)
+  updateFormParams(localFormParams);
 
   try {
-    await processCSV(selectedFile.value)
-    console.log('✅ Procesamiento completado')
+    await processCSV(selectedFile.value);
+    console.log("✅ Procesamiento completado");
   } catch (error) {
-    console.error('Error procesando CSV:', error)
+    console.error("Error procesando CSV:", error);
     // Mostrar error al usuario
-    alert(`Error procesando CSV: ${error.message}`)
+    alert(`Error procesando CSV: ${error.message}`);
   }
 }
 </script>
