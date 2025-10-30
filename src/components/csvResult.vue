@@ -4,37 +4,43 @@
       <v-icon left color="success">mdi-chart-box-outline</v-icon>
       Resultados del Procesamiento
     </v-card-title>
-    
+
     <v-card-text>
       <!-- Estadísticas principales -->
       <v-row class="mb-4">
         <v-col cols="6" sm="3">
           <v-card variant="tonal" color="info">
             <v-card-text class="text-center">
-              <div class="text-h4 font-weight-bold">{{ results.totalFilas }}</div>
+              <div class="text-h4 font-weight-bold">
+                {{ results.totalFilas }}
+              </div>
               <div class="text-body-2">Total Filas</div>
             </v-card-text>
           </v-card>
         </v-col>
-        
+
         <v-col cols="6" sm="3">
           <v-card variant="tonal" color="success">
             <v-card-text class="text-center">
-              <div class="text-h4 font-weight-bold">{{ results.procesadasExitosamente }}</div>
+              <div class="text-h4 font-weight-bold">
+                {{ results.procesadasExitosamente }}
+              </div>
               <div class="text-body-2">Procesadas</div>
             </v-card-text>
           </v-card>
         </v-col>
-        
+
         <v-col cols="6" sm="3">
           <v-card variant="tonal" color="warning">
             <v-card-text class="text-center">
-              <div class="text-h4 font-weight-bold">{{ results.duplicados }}</div>
+              <div class="text-h4 font-weight-bold">
+                {{ results.duplicados }}
+              </div>
               <div class="text-body-2">Duplicados</div>
             </v-card-text>
           </v-card>
         </v-col>
-        
+
         <v-col cols="6" sm="3">
           <v-card variant="tonal" color="error">
             <v-card-text class="text-center">
@@ -51,37 +57,56 @@
           <v-card variant="outlined">
             <v-card-text>
               <div class="text-h6 mb-3">Resumen del Procesamiento</div>
-              
+
               <div class="mb-3">
                 <div class="d-flex justify-space-between mb-1">
                   <span>Procesadas exitosamente</span>
-                  <span>{{ Math.round((results.procesadasExitosamente / results.totalFilas) * 100) }}%</span>
+                  <span
+                    >{{
+                      Math.round(
+                        (results.procesadasExitosamente / results.totalFilas) *
+                          100
+                      )
+                    }}%</span
+                  >
                 </div>
-                <v-progress-linear 
-                  :model-value="(results.procesadasExitosamente / results.totalFilas) * 100"
+                <v-progress-linear
+                  :model-value="
+                    (results.procesadasExitosamente / results.totalFilas) * 100
+                  "
                   color="success"
                   height="8"
                 />
               </div>
-              
+
               <div class="mb-3" v-if="results.duplicados > 0">
                 <div class="d-flex justify-space-between mb-1">
                   <span>Duplicados encontrados</span>
-                  <span>{{ Math.round((results.duplicados / results.totalFilas) * 100) }}%</span>
+                  <span
+                    >{{
+                      Math.round(
+                        (results.duplicados / results.totalFilas) * 100
+                      )
+                    }}%</span
+                  >
                 </div>
-                <v-progress-linear 
+                <v-progress-linear
                   :model-value="(results.duplicados / results.totalFilas) * 100"
                   color="warning"
                   height="8"
                 />
               </div>
-              
+
               <div v-if="results.errores > 0">
                 <div class="d-flex justify-space-between mb-1">
                   <span>Errores encontrados</span>
-                  <span>{{ Math.round((results.errores / results.totalFilas) * 100) }}%</span>
+                  <span
+                    >{{
+                      Math.round((results.errores / results.totalFilas) * 100)
+                    }}%</span
+                  >
                 </div>
-                <v-progress-linear 
+                <v-progress-linear
                   :model-value="(results.errores / results.totalFilas) * 100"
                   color="error"
                   height="8"
@@ -98,7 +123,9 @@
         <v-expansion-panel v-if="results.detalleDuplicados?.length > 0">
           <v-expansion-panel-title>
             <div class="d-flex align-center">
-              <v-icon color="warning" class="mr-2">mdi-content-duplicate</v-icon>
+              <v-icon color="warning" class="mr-2"
+                >mdi-content-duplicate</v-icon
+              >
               Registros Duplicados ({{ results.duplicados }})
             </div>
           </v-expansion-panel-title>
@@ -150,7 +177,7 @@
 defineProps({
   results: {
     type: Object,
-    required: true
-  }
-})
+    required: true,
+  },
+});
 </script>

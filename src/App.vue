@@ -1,8 +1,8 @@
 <template>
   <v-app>
-    <v-app-bar elevation="2" color="primary">
-      <v-app-bar-title class="text-h5 font-weight-bold">
-        <v-icon class="mr-2">mdi-file-table</v-icon>
+    <v-app-bar elevation="0" color="primary" density="compact">
+      <v-app-bar-title class="text-subtitle-1 font-weight-normal">
+        <v-icon class="mr-1">mdi-file-table</v-icon>
         CSV Import Manager
       </v-app-bar-title>
     </v-app-bar>
@@ -16,5 +16,5 @@
 </template>
 
 <script setup>
-import VHome from "./components/VHome.vue";
+import VHome from "./view/VHome.vue";
 </script>

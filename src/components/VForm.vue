@@ -1,8 +1,8 @@
 <script setup>
 import { reactive } from "vue";
-import { authStore } from "../stores/authStore";
+import { useAuthStore } from "../stores/authStore";
 
-const { credentials, saveCredentials } = authStore();
+const { credentials, saveCredentials } = useAuthStore();
 
 const authForm = reactive({
   username: "",
@@ -16,11 +16,13 @@ const rules = {
 <template>
   <v-card elevation="2" class="mb-4" v-if="!credentials.saved">
     <v-card-title class="d-flex align-center">
-      <v-icon class="mr-3" color="warning">mdi-key</v-icon>
-      <span class="text-h6">Credenciales de Acceso</span>
+      <v-icon class="mr-1" color="warning">mdi-key</v-icon>
+      <span class="text-subtitle-1 font-weight-light"
+        >Credenciales de Acceso</span
+      >
     </v-card-title>
     <v-card-text>
-      <v-alert type="info" variant="tonal" class="mb-4">
+      <v-alert type="info" variant="tonal" class="mb-4" closable>
         Ingresa tus credenciales para acceder a la API
       </v-alert>
       <v-row>
@@ -30,6 +32,7 @@ const rules = {
             label="Usuario"
             prepend-icon="mdi-account"
             variant="outlined"
+            density="compact"
             :rules="[rules.required]"
           />
         </v-col>
@@ -40,6 +43,7 @@ const rules = {
             type="password"
             prepend-icon="mdi-lock"
             variant="outlined"
+            density="compact"
             :rules="[rules.required]"
           />
         </v-col>
