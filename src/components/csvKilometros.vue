@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from "vue";
-import { useCSVStore } from "@/stores/useCSVStore";
+import { useCSVStore } from "@/stores/useCsvStore";
+
 const csvStore = useCSVStore();
 
 function handleFileUpload(e) {
