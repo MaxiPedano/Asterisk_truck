@@ -1,12 +1,13 @@
 import { defineStore } from "pinia";
 import { reactive, ref } from "vue";
-import { setAuth } from "../service/apiService";
+import { setToken } from "../service/apiService";
 
 export const useAuthStore = defineStore("auth", () => {
   // --- Cargar desde localStorage al inicializar ---
   const savedCredentials = localStorage.getItem("auth_credentials");
   const savedToken = localStorage.getItem("auth_token");
   const savedTokenExpiry = localStorage.getItem("auth_token_expiry");
+  const savedUserData = localStorage.getItem("auth_user_data");
 
   // --- Estado ---
   const credentials = reactive({
@@ -17,6 +18,16 @@ export const useAuthStore = defineStore("auth", () => {
 
   const token = ref(savedToken || null);
   const tokenExpiry = ref(savedTokenExpiry ? parseInt(savedTokenExpiry) : null);
+
+  // Datos del usuario logueado
+  const userData = reactive({
+    id: null,
+    perfilid: null,
+    username: null,
+    roles: [],
+    ...(savedUserData ? JSON.parse(savedUserData) : {})
+  });
+
   const connectionStatus = reactive({});
   const batchConfig = reactive({
     tokenRefreshThreshold: 1200, // 20 minutos antes de expirar
@@ -28,32 +39,49 @@ export const useAuthStore = defineStore("auth", () => {
     apiUrl1: "https://api.flowsma.com/donandres",
   });
 
-  // Restaurar auth en axios si hay credenciales guardadas
-  if (credentials.saved) {
-    setAuth(credentials.username, credentials.password);
+  // Restaurar token en axios si hay token guardado y aún es válido
+  if (savedToken && savedTokenExpiry && parseInt(savedTokenExpiry) > Date.now()) {
+    setToken(savedToken);
+    console.log('🔄 Token restaurado desde localStorage');
   }
 
   // --- Guardar credenciales ---
-  // En la función saveCredentials
-  function saveCredentials(userData) {
-    credentials.username = userData.username;
-    credentials.password = userData.password;
+  function saveCredentials(userCredentials) {
+    credentials.username = userCredentials.username;
+    credentials.password = userCredentials.password;
     credentials.saved = true;
 
     // IMPORTANTE: Actualizar formParams
-    formParams.username = userData.username;
-    formParams.password = userData.password;
+    formParams.username = userCredentials.username;
+    formParams.password = userCredentials.password;
 
     // Guardar en localStorage
     localStorage.setItem(
       "auth_credentials",
       JSON.stringify({
-        username: userData.username,
-        password: userData.password,
+        username: userCredentials.username,
+        password: userCredentials.password,
       })
     );
+  }
 
-    setAuth(userData.username, userData.password);
+  // --- Guardar datos de usuario ---
+  function saveUserData(data) {
+    userData.id = data.id;
+    userData.perfilid = data.perfilid;
+    userData.username = data.username;
+    userData.roles = data.roles || [];
+
+    // Guardar en localStorage
+    localStorage.setItem(
+      "auth_user_data",
+      JSON.stringify({
+        id: data.id,
+        perfilid: data.perfilid,
+        username: data.username,
+        roles: data.roles,
+      })
+    );
   }
 
   // --- Limpiar credenciales ---
@@ -64,10 +92,20 @@ export const useAuthStore = defineStore("auth", () => {
     token.value = null;
     tokenExpiry.value = null;
 
+    // Limpiar datos de usuario
+    userData.id = null;
+    userData.perfilid = null;
+    userData.username = null;
+    userData.roles = [];
+
     // Limpiar localStorage
     localStorage.removeItem("auth_credentials");
     localStorage.removeItem("auth_token");
     localStorage.removeItem("auth_token_expiry");
+    localStorage.removeItem("auth_user_data");
+
+    // Eliminar token de Axios
+    setToken(null);
   }
 
   // --- Verifica si el token está por expirar ---
@@ -83,7 +121,13 @@ export const useAuthStore = defineStore("auth", () => {
   async function login(forceRenew = false) {
     try {
       if (token.value && !isTokenExpiring() && !forceRenew) {
-        return { access_token: token.value };
+        return {
+          access_token: token.value,
+          id: userData.id,
+          perfilid: userData.perfilid,
+          username: userData.username,
+          roles: userData.roles
+        };
       }
 
       if (!formParams.username || !formParams.password) {
@@ -106,16 +150,29 @@ export const useAuthStore = defineStore("auth", () => {
       }
 
       const data = await response.json();
+
+      // Guardar token
       token.value = data.access_token;
       tokenExpiry.value = Date.now() + (data.expires_in || 3600) * 1000;
       credentials.saved = true;
 
-      // Guardar token en localStorage
+      // Guardar token localmente
       localStorage.setItem("auth_token", data.access_token);
       localStorage.setItem("auth_token_expiry", tokenExpiry.value.toString());
 
+      // Guardar datos del usuario
+      saveUserData({
+        id: data.id,
+        perfilid: data.perfilid,
+        username: data.username,
+        roles: data.roles,
+      });
+
+      // 👉 Establecer token en Axios
+      setToken(data.access_token);
+
       console.log(
-        `✅ Token renovado - Expira: ${new Date(
+        `✅ Token renovado - Usuario: ${data.username} (ID: ${data.id}) - Expira: ${new Date(
           tokenExpiry.value
         ).toLocaleString()}`
       );
@@ -127,9 +184,19 @@ export const useAuthStore = defineStore("auth", () => {
       tokenExpiry.value = null;
       credentials.saved = false;
 
-      // Limpiar localStorage en caso de error
+      // Limpiar datos de usuario
+      userData.id = null;
+      userData.perfilid = null;
+      userData.username = null;
+      userData.roles = [];
+
+      // Limpiar todo en caso de error
       localStorage.removeItem("auth_token");
       localStorage.removeItem("auth_token_expiry");
+      localStorage.removeItem("auth_user_data");
+
+      // Eliminar token de Axios
+      setToken(null);
 
       throw error;
     }
@@ -142,6 +209,9 @@ export const useAuthStore = defineStore("auth", () => {
       connectionStatus.success = true;
       connectionStatus.message = "Conexión exitosa - Token válido";
       connectionStatus.hasToken = !!loginData.access_token;
+      connectionStatus.userId = loginData.id;
+      connectionStatus.username = loginData.username;
+      connectionStatus.roles = loginData.roles;
       connectionStatus.tokenExpiry = tokenExpiry.value
         ? new Date(tokenExpiry.value).toLocaleString()
         : null;
@@ -165,8 +235,10 @@ export const useAuthStore = defineStore("auth", () => {
     formParams,
     token,
     tokenExpiry,
+    userData,
     connectionStatus,
     saveCredentials,
+    saveUserData,
     clearCredentials,
     testConnection,
     login,

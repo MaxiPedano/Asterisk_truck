@@ -131,7 +131,7 @@
           </v-col>
         </v-row>
 
-        <!-- Indicador de carga con progreso -->
+        <!-- Indicador de carga -->
         <v-row v-if="isLoading">
           <v-col cols="12">
             <v-card variant="tonal" color="primary">
@@ -146,7 +146,8 @@
                 <div class="text-body-2 mt-2">
                   Los registros se procesan en lotes para evitar desconexiones
                 </div>
-                <!-- Mostrar progreso si hay resultados parciales -->
+
+                <!-- Progreso parcial -->
                 <div v-if="processingResults" class="mt-4">
                   <v-progress-linear
                     :model-value="
@@ -175,7 +176,7 @@
           </v-col>
         </v-row>
 
-        <!-- Botones de acción -->
+        <!-- Botones -->
         <v-row class="mt-4">
           <v-col cols="12" md="6">
             <v-btn
@@ -190,6 +191,28 @@
             >
               Probar Conexión
             </v-btn>
+
+            <!-- Diálogo -->
+            <v-dialog v-model="dialog" max-width="450">
+              <v-card>
+                <v-card-title class="text-white" :class="dialogColor">
+                  {{ dialogTitle }}
+                </v-card-title>
+                <v-card-text>
+                  <div>{{ dialogMessage }}</div>
+                  <div
+                    v-if="connectionInfo?.timestamp"
+                    class="text-caption mt-2"
+                  >
+                    {{ connectionInfo.timestamp }}
+                  </div>
+                </v-card-text>
+                <v-card-actions>
+                  <v-spacer />
+                  <v-btn text @click="dialog = false">Cerrar</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-dialog>
           </v-col>
 
           <v-col cols="12" md="6">
@@ -211,7 +234,7 @@
     </v-card-text>
   </v-card>
 
-  <!-- Componente de resultados -->
+  <!-- Resultados -->
   <CSVResults
     v-if="processingResults && !isLoading"
     :results="processingResults"
@@ -220,25 +243,24 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from "vue";
-import { useCSV } from "../composables/useCSV";
+import { ref, reactive } from "vue";
 import CSVResults from "./csvResult.vue";
-import { authStore } from "../stores/authStore";
+import { useAuthStore } from "../stores/authStore";
+import { useCsvStore } from "../stores/csvStore";
 
-const { credentials } = authStore();
-
-const {
-  isLoading,
-  processingResults,
-  connectionStatus,
-  processCSV,
-  testConnection: testConn,
-  updateFormParams,
-} = useCSV();
+const { credentials, testConnection: testConn } = useAuthStore();
+const loading = ref(false);
+const { processingResults, connectionStatus, processCSV, updateFormParams } =
+  useCsvStore();
 
 const form = ref(null);
 const selectedFile = ref(null);
 const selectedFileArray = ref([]);
+const dialog = ref(false);
+const dialogTitle = ref("");
+const dialogMessage = ref("");
+const dialogColor = ref("bg-primary");
+const connectionInfo = ref(null);
 
 const localFormParams = reactive({
   flowid: "",
@@ -250,7 +272,7 @@ const rules = {
   required: (value) => !!value || "Este campo es requerido",
 };
 
-// Funciones para configuración rápida
+// Configuración rápida
 function setComprasB() {
   localFormParams.flowid = "11079";
   localFormParams.statusid = "1692";
@@ -263,46 +285,41 @@ function setComprasA() {
   localFormParams.statusflowid = "776";
 }
 
-function handleFileSelect() {
-  console.log("=== DEBUG FILE SELECT ===");
-  console.log("selectedFileArray.value:", selectedFileArray.value);
-  console.log("selectedFileArray.value[0]:", selectedFileArray.value[0]);
-  const file = event.target?.files?.[0] || selectedFileArray.value?.[0] || null;
+function handleFileSelect(event) {
+  const file =
+    event?.target?.files?.[0] || selectedFileArray.value?.[0] || null;
   selectedFile.value = file;
-  console.log("selectedFile.value después:", selectedFile.value);
-  console.log(
-    "Botón debería estar:",
-    selectedFile.value ? "HABILITADO" : "DESHABILITADO"
-  );
 }
 
+// Test de conexión con diálogo
 async function testConnection() {
+  loading.value = true;
   try {
-    await testConn();
+    const result = await testConn();
+    dialogTitle.value = "✅ Conexión exitosa";
+    dialogColor.value = "bg-success";
+    dialogMessage.value = result.message;
+    connectionInfo.value = result;
   } catch (error) {
-    console.error("Error probando conexión:", error);
+    dialogTitle.value = "❌ Error de conexión";
+    dialogColor.value = "bg-error";
+    dialogMessage.value =
+      error.message || "Ocurrió un error al probar la conexión";
+    connectionInfo.value = { timestamp: new Date().toLocaleString() };
+  } finally {
+    loading.value = false;
+    dialog.value = true;
   }
 }
 
+// Procesar CSV
 async function handleSubmit() {
-  console.log("=== DEBUG IMPORTAR ===");
-  console.log("Form params:", localFormParams);
-  console.log("Selected file:", selectedFile.value);
-  console.log("Credentials saved:", credentials.value.saved);
-
-  if (!selectedFile.value || !credentials.value.saved) {
-    return;
-  }
-
-  // Actualizar parámetros en el store
+  if (!selectedFile.value || !credentials.value.saved) return;
   updateFormParams(localFormParams);
 
   try {
     await processCSV(selectedFile.value);
-    console.log("✅ Procesamiento completado");
   } catch (error) {
-    console.error("Error procesando CSV:", error);
-    // Mostrar error al usuario
     alert(`Error procesando CSV: ${error.message}`);
   }
 }

@@ -1,17 +1,16 @@
 // stores/csvStore.js - Store con diagnóstico profundo para identificar el problema de los 50 registros
 import { defineStore } from 'pinia'
-import dayjs from 'dayjs'
-import customParseFormat from 'dayjs/plugin/customParseFormat'
+import { formatearFecha } from '../utils/formatDate'
+import { parseNumberSafe } from '../utils/parseNumber'
+import { useAuthStore } from '../stores/authStore'
 
-dayjs.extend(customParseFormat)
 
 export const useCsvStore = defineStore('csv', {
   state: () => ({
     isLoading: false,
     processingResults: null,
     connectionStatus: null,
-    token: null,
-    tokenExpiry: null,
+
     diagnosticData: {
       requestsLog: [],
       responsesLog: [],
@@ -34,11 +33,7 @@ export const useCsvStore = defineStore('csv', {
       username: '',
       password: ''
     },
-    credentials: {
-      saved: false,
-      username: '',
-      password: ''
-    },
+
     // Config ultra conservadora para diagnóstico
     batchConfig: {
       batchSize: 1, // UNO por vez para diagnóstico preciso
@@ -53,12 +48,12 @@ export const useCsvStore = defineStore('csv', {
   }),
 
   actions: {
-    // -------------------------
-    // Diagnóstico y Logging
-    // -------------------------
+    getAuth() {
+      return useAuthStore()
+    },
     logRequest(operation, payload, recordIndex) {
       if (!this.batchConfig.enableDiagnostics) return
-      
+
       this.diagnosticData.requestsLog.push({
         timestamp: new Date().toISOString(),
         operation,
@@ -66,7 +61,7 @@ export const useCsvStore = defineStore('csv', {
         payload: JSON.parse(JSON.stringify(payload)), // Deep clone
         tokenUsed: this.token ? this.token.substring(0, 20) + '...' : null
       })
-      
+
       // Mantener solo los últimos 100 requests
       if (this.diagnosticData.requestsLog.length > 100) {
         this.diagnosticData.requestsLog.shift()
@@ -75,7 +70,7 @@ export const useCsvStore = defineStore('csv', {
 
     logResponse(operation, response, success, recordIndex, actualData = null) {
       if (!this.batchConfig.enableDiagnostics) return
-      
+
       this.diagnosticData.responsesLog.push({
         timestamp: new Date().toISOString(),
         operation,
@@ -85,7 +80,7 @@ export const useCsvStore = defineStore('csv', {
         responseData: actualData ? JSON.parse(JSON.stringify(actualData)) : null,
         responseSize: actualData ? JSON.stringify(actualData).length : 0
       })
-      
+
       // Mantener solo las últimas 100 respuestas
       if (this.diagnosticData.responsesLog.length > 100) {
         this.diagnosticData.responsesLog.shift()
@@ -94,15 +89,15 @@ export const useCsvStore = defineStore('csv', {
 
     async verifyInsertion(referenciatexto, recordIndex) {
       if (!this.batchConfig.verifyInsertions) return { verified: true, found: true }
-      
+
       try {
         console.log(`🔍 VERIFICACIÓN: Confirmando inserción de registro ${recordIndex} (ref: ${referenciatexto})`)
-        
+
         // Esperar un poco para que el servidor procese
         await new Promise(r => setTimeout(r, 1000))
-        
+
         const validacion = await this.validarExistencia(null, referenciatexto, recordIndex, true)
-        
+
         const verification = {
           recordIndex,
           referenciatexto,
@@ -111,9 +106,9 @@ export const useCsvStore = defineStore('csv', {
           timestamp: new Date().toISOString(),
           searchResults: validacion.allRows?.length || 0
         }
-        
+
         this.diagnosticData.insertionVerification.push(verification)
-        
+
         if (!validacion.existe) {
           console.error(`❌ VERIFICACIÓN FALLÓ: Registro ${recordIndex} no encontrado después de inserción!`)
           console.error(`   Referencia buscada: "${referenciatexto}"`)
@@ -121,7 +116,7 @@ export const useCsvStore = defineStore('csv', {
         } else {
           console.log(`✅ VERIFICACIÓN OK: Registro ${recordIndex} confirmado en base de datos`)
         }
-        
+
         return verification
       } catch (error) {
         console.warn(`⚠️ Error verificando inserción del registro ${recordIndex}:`, error.message)
@@ -130,167 +125,16 @@ export const useCsvStore = defineStore('csv', {
     },
 
     // -------------------------
-    // Helpers
-    // -------------------------
-    obtenerFechaServidor() {
-      return dayjs().format('YYYY-MM-DD')
-    },
-
-    formatearFecha(fechaString) {
-      const formatos = [
-        'YYYY-MM-DD', 'YYYY/MM/DD', 'YYYY.MM.DD',
-        'DD/MM/YYYY', 'D/M/YYYY', 'DD-MM-YYYY', 'D-M-YYYY',
-        'MM-DD-YYYY', 'MM/DD/YYYY', 'DD.MM.YYYY',
-        'YYYY-MM-DDTHH:mm:ss', 'DD/MM/YYYY HH:mm:ss', 'MM/DD/YYYY HH:mm:ss'
-      ]
-
-      if (!fechaString && fechaString !== 0) {
-        return this.obtenerFechaServidor()
-      }
-
-      const limpio = String(fechaString).trim()
-      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(limpio)) {
-        const [y, m, d] = limpio.split('-')
-        return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-      }
-
-      for (const fmt of formatos) {
-        const parsed = dayjs(limpio, fmt, true)
-        if (parsed.isValid()) {
-          return parsed.format('YYYY-MM-DD')
-        }
-      }
-
-      return this.obtenerFechaServidor()
-    },
-
-parseNumberSafe(value) {
-  if (value === null || value === undefined || value === '') return 0
-  
-  const str = String(value).trim().replace(/\s+/g, '')
-  
-  // Si no hay separadores, retornar directamente
-  if (!/[,.]/.test(str)) {
-    const n = parseFloat(str)
-    return Number.isFinite(n) ? n : 0
-  }
-  
-  const lastComma = str.lastIndexOf(',')
-  const lastDot = str.lastIndexOf('.')
-  
-  let cleanStr
-  
-  // Caso 1: Solo tiene comas o solo tiene puntos
-  if (lastComma === -1) {
-    // Solo puntos - puede ser separador de miles o decimal
-    const dotCount = (str.match(/\./g) || []).length
-    if (dotCount > 1) {
-      // Múltiples puntos = separador de miles europeo: 8.224.514
-      cleanStr = str.replace(/\./g, '')
-    } else {
-      // Un solo punto - verificar si es decimal o separador de miles
-      const afterDot = str.substring(lastDot + 1)
-      if (afterDot.length === 3 && /^\d{3}$/.test(afterDot)) {
-        // Probablemente separador de miles: 8.514 -> 8514
-        cleanStr = str.replace(/\./g, '')
-      } else {
-        // Probablemente decimal: 8.75 -> 8.75
-        cleanStr = str
-      }
-    }
-  } else if (lastDot === -1) {
-    // Solo comas - puede ser separador de miles o decimal
-    const commaCount = (str.match(/,/g) || []).length
-    if (commaCount > 1) {
-      // Múltiples comas = separador de miles americano: 8,224,514
-      cleanStr = str.replace(/,/g, '')
-    } else {
-      // Una sola coma - verificar si es decimal o separador de miles
-      const afterComma = str.substring(lastComma + 1)
-      if (afterComma.length === 3 && /^\d{3}$/.test(afterComma)) {
-        // Probablemente separador de miles: 8,514 -> 8514
-        cleanStr = str.replace(/,/g, '')
-      } else {
-        // Probablemente decimal europeo: 8,75 -> 8.75
-        cleanStr = str.replace(',', '.')
-      }
-    }
-  } else {
-    // Tiene ambos separadores - determinar cuál es el decimal
-    if (lastComma > lastDot) {
-      // Formato europeo: 8.224.514,75 o 8.224,75
-      cleanStr = str.replace(/\./g, '').replace(',', '.')
-    } else {
-      // Formato americano: 8,224,514.75 o 8,224.75
-      cleanStr = str.replace(/,/g, '')
-    }
-  }
-  
-  const n = parseFloat(cleanStr)
-  return Number.isFinite(n) ? n : 0
-},
-
-    // -------------------------
-    // Token Management
-    // -------------------------
-    isTokenExpiring() {
-      if (!this.tokenExpiry) return true
-      const now = Date.now()
-      const timeToExpiry = this.tokenExpiry - now
-      const thresholdMs = (this.batchConfig.tokenRefreshThreshold || 1200) * 1000
-      return timeToExpiry < thresholdMs
-    },
-
-    async login(forceRenew = false) {
-      try {
-        if (this.token && !this.isTokenExpiring() && !forceRenew) {
-          return { access_token: this.token }
-        }
-
-        if (!this.formParams.username || !this.formParams.password) {
-          throw new Error('Usuario y contraseña son requeridos')
-        }
-
-        console.log('🔄 Renovando token...')
-        const response = await fetch(`${this.formParams.apiUrl1}/api/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: this.formParams.username,
-            password: this.formParams.password
-          })
-        })
-
-        if (!response.ok) {
-          const text = await response.text().catch(() => '')
-          throw new Error(`${response.status} - ${text || 'Login failed'}`)
-        }
-
-        const data = await response.json()
-        this.token = data.access_token
-        this.tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000
-        this.credentials.saved = true
-        
-        console.log(`✅ Token renovado - Expira: ${new Date(this.tokenExpiry).toLocaleString()}`)
-        return data
-      } catch (error) {
-        console.error('❌ Error en login:', error)
-        this.token = null
-        this.tokenExpiry = null
-        this.credentials.saved = false
-        throw error
-      }
-    },
-
-    // -------------------------
     // API Request Handler con diagnóstico profundo
     // -------------------------
     async handleApiRequest(requestFn, maxRetries = 3, recordIndex = 0, operation = 'unknown') {
+      const { login, isTokenExpiring } = this.getAuth()
+
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-          if (this.isTokenExpiring()) {
+          if (isTokenExpiring()) {
             console.log(`🔄 Renovando token antes de ${operation} (registro ${recordIndex})`)
-            await this.login(true)
+            await login(true)
           }
 
           const result = await requestFn()
@@ -303,9 +147,9 @@ parseNumberSafe(value) {
             const waitTime = 2000 * attempt
             if (errorMsg.includes('401') || errorMsg.includes('403')) {
               console.log('🔑 Error de autorización - renovando token')
-              try { await this.login(true) } catch (e) { console.warn('No se pudo renovar token:', e.message) }
+              try { await login(true) } catch (e) { console.warn('No se pudo renovar token:', e.message) }
             }
-            
+
             console.log(`⏳ Esperando ${waitTime}ms antes del siguiente intento...`)
             await new Promise(r => setTimeout(r, waitTime))
             continue
@@ -365,13 +209,13 @@ parseNumberSafe(value) {
 
         let existe = false
         let registroExistente = null
-        
+
         if (referenciatexto) {
           // Búsqueda exacta primero
-          const encontradoExacto = rows.find(item => 
+          const encontradoExacto = rows.find(item =>
             String(item.referenciatexto).trim() === String(referenciatexto).trim()
           )
-          
+
           if (encontradoExacto) {
             existe = true
             registroExistente = encontradoExacto
@@ -380,7 +224,7 @@ parseNumberSafe(value) {
             }
           } else {
             // Búsqueda case-insensitive como fallback
-            const encontradoInsensitive = rows.find(item => 
+            const encontradoInsensitive = rows.find(item =>
               String(item.referenciatexto).toLowerCase().trim() === String(referenciatexto).toLowerCase().trim()
             )
             if (encontradoInsensitive) {
@@ -407,7 +251,7 @@ parseNumberSafe(value) {
       return this.handleApiRequest(async () => {
         // Log del payload completo
         this.logRequest('saveRegistroCab', cabeceraData, recordIndex)
-        
+
         console.log(`🚀 ENVIANDO registro ${recordIndex}:`)
         console.log(`   Referencia: "${cabeceraData.referenciatexto}"`)
         console.log(`   Token usado: ${this.token ? this.token.substring(0, 20) + '...' : 'NINGUNO'}`)
@@ -435,7 +279,7 @@ parseNumberSafe(value) {
             console.error(`❌ Error leyendo respuesta error registro ${recordIndex}:`, e.message)
             text = `Error reading response: ${e.message}`
           }
-          
+
           this.logResponse('saveRegistroCab', response, false, recordIndex, { error: text })
           throw new Error(`${response.status} - ${text || 'Error guardando registro'}`)
         }
@@ -471,12 +315,12 @@ parseNumberSafe(value) {
 
       try {
         console.log('🔐 Iniciando sesión...')
-        await this.login(true)
+        await login(true)
 
         console.log('📄 Leyendo archivo CSV...')
         const csvText = await file.text()
         const rows = this.parseCSV(csvText)
-        
+
         if (rows.length === 0) {
           throw new Error('El archivo CSV está vacío')
         }
@@ -506,14 +350,14 @@ parseNumberSafe(value) {
 
           try {
             this.updateProgress(recordIndex, rows.length)
-            
+
             console.log(`\n📝 =================== REGISTRO ${recordIndex}/${rows.length} ===================`)
 
             // Preparar datos
-            const fechaCarga = this.formatearFecha(row['Fecha Carga'] || row['Fecha'] || row['fecha'])
-            const fechaCompromiso = this.formatearFecha(row['Fecha'] || row['fechacompromiso'] || row['Fecha Compromiso'])
-            const referenciaTexto = (row['Comprobante'] && String(row['Comprobante']).trim()) || 
-                                    `diagnostic-${Date.now()}-${recordIndex}`
+            const fechaCarga = formatearFecha(row['Fecha Carga'] || row['Fecha'] || row['fecha'])
+            const fechaCompromiso = formatearFecha(row['Fecha'] || row['fechacompromiso'] || row['Fecha Compromiso'])
+            const referenciaTexto = (row['Comprobante'] && String(row['Comprobante']).trim()) ||
+              `diagnostic-${Date.now()}-${recordIndex}`
 
             console.log(`📋 Datos del registro ${recordIndex}:`)
             console.log(`   Referencia: "${referenciaTexto}"`)
@@ -525,7 +369,7 @@ parseNumberSafe(value) {
             // Validar duplicados
             console.log(`🔍 Validando duplicados...`)
             const validacion = await this.validarExistencia(null, referenciaTexto, recordIndex)
-            
+
             if (validacion.existe) {
               console.log(`⚠️ DUPLICADO DETECTADO registro ${recordIndex}`)
               totalResults.duplicados++
@@ -549,17 +393,17 @@ parseNumberSafe(value) {
               obsinicio: String(row['Concepto'] || '').substring(0, 255),
               obsventas: String(row['Motivo Det'] || row['Motivo'] || '').substring(0, 255),
               referenciatexto: referenciaTexto.substring(0, 50),
-              totalimpuestos: this.parseNumberSafe(row['Imp IVA1']),
-              totalprecio: this.parseNumberSafe(row['Imp Total']),
-              varcn0: this.parseNumberSafe(row['Imp Exento']),
-              varcn1: this.parseNumberSafe(row['Imp Gravado']),
+              totalimpuestos: parseNumberSafe(row['Imp IVA1']),
+              totalprecio: parseNumberSafe(row['Imp Total']),
+              varcn0: parseNumberSafe(row['Imp Exento']),
+              varcn1: parseNumberSafe(row['Imp Gravado']),
               clientname: String(row['Nombre'] || "Sin nombre").substring(0, 100),
               descrip: String(row['Concepto'] || `Importación CSV fila ${recordIndex}`).substring(0, 255)
             }
 
             console.log(`💾 Enviando a base de datos...`)
             const saveResult = await this.saveRegistroCab(cabeceraData, recordIndex)
-            
+
             console.log(`✅ Guardado exitoso registro ${recordIndex}`)
             totalResults.procesadasExitosamente++
 
@@ -568,11 +412,11 @@ parseNumberSafe(value) {
               console.log(`🔍 VERIFICANDO inserción real...`)
               const verification = await this.verifyInsertion(referenciaTexto, recordIndex)
               totalResults.detalleVerificaciones.push(verification)
-              
+
               if (verification.verified && !verification.found) {
                 console.error(`💥 PROBLEMA CRÍTICO: Registro ${recordIndex} reportó éxito pero NO está en la base!`)
                 totalResults.verificacionesFallidas++
-                
+
                 // Detectar si llegamos al límite de 50
                 if (recordIndex === 51 || recordIndex === 52) {
                   console.error(`🚨 LÍMITE DETECTADO: Falla de verificación en registro ${recordIndex} - posible límite de API`)
@@ -604,8 +448,8 @@ parseNumberSafe(value) {
             totalResults.detalleErrores.push({
               fila: recordIndex,
               datos: {
-                comprobante: row['Comprobante'], 
-                nombre: row['Nombre'], 
+                comprobante: row['Comprobante'],
+                nombre: row['Nombre'],
                 concepto: row['Concepto']
               },
               error: msg
@@ -630,7 +474,7 @@ parseNumberSafe(value) {
         console.log(`   Errores: ${totalResults.errores}`)
         console.log(`   Verificaciones fallidas: ${totalResults.verificacionesFallidas}`)
         console.log(`   Duración: ${totalResults.duracionMinutos} minutos`)
-        
+
         if (this.diagnosticData.apiLimitsDetected) {
           console.error(`🚨 LÍMITE DE API DETECTADO:`, this.diagnosticData.apiLimitsDetected)
         }
@@ -668,10 +512,10 @@ parseNumberSafe(value) {
         const result = []
         let current = ''
         let inQuotes = false
-        
+
         for (let i = 0; i < line.length; i++) {
           const char = line[i]
-          
+
           if (char === '"') {
             inQuotes = !inQuotes
           } else if (char === ',' && !inQuotes) {
@@ -687,13 +531,13 @@ parseNumberSafe(value) {
 
       // Parsear primera línea
       const firstLine = splitLine(lines[0]).map(h => h.replace(/^"|"$/g, ''))
-      
+
       // DETECCIÓN INTELIGENTE: ¿La primera fila son headers o datos?
       const hasRealHeaders = this.detectHeaders(firstLine)
-      
+
       let headers = []
       let dataStartIndex = 0
-      
+
       if (hasRealHeaders) {
         console.log(`📄 Headers reales detectados`)
         headers = firstLine
@@ -721,9 +565,9 @@ parseNumberSafe(value) {
         ]
         dataStartIndex = 0 // Empezar desde la primera fila
       }
-      
+
       const rows = []
-      
+
       // Procesar filas de datos
       for (let i = dataStartIndex; i < lines.length; i++) {
         const values = splitLine(lines[i]).map(v => v.replace(/^"|"$/g, ''))
@@ -733,10 +577,10 @@ parseNumberSafe(value) {
         })
         rows.push(row)
       }
-      
+
       console.log(`📄 CSV parseado correctamente: ${headers.length} columnas, ${rows.length} filas`)
       console.log(`📄 Headers finales:`, headers)
-      
+
       // Log de muestra de datos para verificar
       if (rows.length > 0) {
         console.log(`📄 Muestra del primer registro:`)
@@ -746,7 +590,7 @@ parseNumberSafe(value) {
         console.log(`   Nombre: "${rows[0]['Nombre'] || 'N/A'}"`)
         console.log(`   Imp Total: "${rows[0]['Imp Total'] || 'N/A'}"`)
       }
-      
+
       return rows
     },
 
@@ -755,53 +599,53 @@ parseNumberSafe(value) {
     // -------------------------
     detectHeaders(firstLine) {
       // Criterios para detectar headers reales vs datos:
-      
+
       // 1. Si hay nombres típicos de columnas
       const commonHeaders = [
         'id', 'nombre', 'concepto', 'fecha', 'comprobante', 'importe', 'total',
         'cliente', 'direccion', 'localidad', 'motivo', 'estado', 'gravado',
         'exento', 'iva', 'impuesto'
       ]
-      
-      const hasCommonHeaders = firstLine.some(field => 
-        commonHeaders.some(header => 
+
+      const hasCommonHeaders = firstLine.some(field =>
+        commonHeaders.some(header =>
           field.toLowerCase().includes(header)
         )
       )
-      
+
       // 2. Si la primera columna es claramente un número (ID numérico)
       const firstFieldIsNumericId = /^\d+$/.test(firstLine[0])
-      
+
       // 3. Si hay fechas en formato típico en posiciones esperadas  
-      const hasDateFormats = firstLine.some(field => 
-        /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(field) || 
+      const hasDateFormats = firstLine.some(field =>
+        /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(field) ||
         /^\d{4}-\d{1,2}-\d{1,2}$/.test(field)
       )
-      
+
       // 4. Si hay importes con decimales en las últimas columnas
       const hasDecimalAmounts = firstLine.slice(-6).some(field =>
         /^\d+\.\d{2}$/.test(field)
       )
-      
+
       console.log(`🔍 Análisis de headers:`)
       console.log(`   Tiene headers comunes: ${hasCommonHeaders}`)
       console.log(`   Primer campo es ID numérico: ${firstFieldIsNumericId}`)
       console.log(`   Tiene formatos de fecha: ${hasDateFormats}`)
       console.log(`   Tiene importes decimales: ${hasDecimalAmounts}`)
-      
+
       // Si tiene fechas e importes, probablemente son DATOS, no headers
       const looksLikeData = firstFieldIsNumericId && hasDateFormats && hasDecimalAmounts
-      
+
       if (looksLikeData) {
         console.log(`📋 CONCLUSIÓN: Primera fila parece ser DATOS`)
         return false
       }
-      
+
       if (hasCommonHeaders) {
         console.log(`📋 CONCLUSIÓN: Primera fila parece ser HEADERS`)
         return true
       }
-      
+
       console.log(`📋 CONCLUSIÓN: No está claro, asumiendo DATOS por seguridad`)
       return false
     },
@@ -817,7 +661,7 @@ parseNumberSafe(value) {
         currentProgress: this.currentProgress,
         batchConfig: this.batchConfig
       }
-      
+
       const blob = new Blob([JSON.stringify(diagnostic, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -825,35 +669,11 @@ parseNumberSafe(value) {
       a.download = `csv-import-diagnostic-${Date.now()}.json`
       a.click()
       URL.revokeObjectURL(url)
-      
+
       console.log('📋 Datos de diagnóstico exportados')
       return diagnostic
     },
 
-    // -------------------------
-    // Métodos auxiliares
-    // -------------------------
-    async testConnection() {
-      try {
-        const loginData = await this.login(true)
-        this.connectionStatus = {
-          success: true,
-          message: "Conexión exitosa - Token válido",
-          hasToken: !!loginData.access_token,
-          tokenExpiry: this.tokenExpiry ? new Date(this.tokenExpiry).toLocaleString() : null,
-          timestamp: new Date().toLocaleString()
-        }
-        return this.connectionStatus
-      } catch (error) {
-        this.connectionStatus = {
-          success: false,
-          message: "Error de conexión",
-          error: error.message || String(error),
-          timestamp: new Date().toLocaleString()
-        }
-        throw error
-      }
-    },
 
     updateFormParams(params) {
       this.formParams = { ...this.formParams, ...params }
@@ -878,11 +698,11 @@ parseNumberSafe(value) {
       this.updateProgress(0, 0)
     },
     updateProgress(current, total) {
-    this.currentProgress.current = current
-    this.currentProgress.total = total
-    this.currentProgress.percentage = total > 0 
-      ? Math.round((current / total) * 100) 
-      : 0
-  }
+      this.currentProgress.current = current
+      this.currentProgress.total = total
+      this.currentProgress.percentage = total > 0
+        ? Math.round((current / total) * 100)
+        : 0
+    }
   }
 })
