@@ -242,6 +242,9 @@ export const useKilometrosStore = defineStore("csv", {
                 for (let i = 0; i < registros.length; i++) {
                     const registro = registros[i];
 
+                    console.log('Valor:', registro.fecha);
+                    console.log('Tipo:', typeof registro.fecha);
+                    console.log(formatearFecha(registro.fecha));
                     // Reportar progreso al componente
                     if (onProgress) {
                         onProgress(i + 1, registro);

@@ -250,8 +250,13 @@ import { useCsvStore } from "../stores/csvStore";
 
 const { credentials, testConnection: testConn } = useAuthStore();
 const loading = ref(false);
-const { processingResults, connectionStatus, processCSV, updateFormParams } =
-  useCsvStore();
+const {
+  processingResults,
+  connectionStatus,
+  processCSV,
+  updateFormParams,
+  isLoading,
+} = useCsvStore();
 
 const form = ref(null);
 const selectedFile = ref(null);
