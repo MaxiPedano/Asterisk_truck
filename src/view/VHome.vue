@@ -4,6 +4,7 @@ import VForm from "../components/VForm.vue";
 import InstruccionesCompras from "../components/InstruccionesCompras.vue";
 import CsvKilometros from "@/components/csvKilometros.vue";
 import CsvImportForm from "@/components/csvImportForm.vue";
+import VCompras from "../components/VCompras.vue";
 
 const tab = ref("one");
 </script>
@@ -16,7 +17,8 @@ const tab = ref("one");
 
         <v-tabs v-model="tab" color="primary">
           <v-tab value="one">Csv Kilometros</v-tab>
-          <v-tab value="two">Csv Compras</v-tab>
+          <v-tab value="two">Compras</v-tab>
+          <v-tab value="tres">Csv Compras</v-tab>
         </v-tabs>
 
         <v-tabs-window v-model="tab">
@@ -25,6 +27,10 @@ const tab = ref("one");
           </v-tabs-window-item>
 
           <v-tabs-window-item value="two">
+            <VCompras />
+          </v-tabs-window-item>
+
+          <v-tabs-window-item value="tres">
             <InstruccionesCompras />
             <CsvImportForm />
           </v-tabs-window-item>
