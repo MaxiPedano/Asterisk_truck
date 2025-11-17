@@ -72,11 +72,14 @@ export const useComprasStore = defineStore("compras", {
         // ]
 
         const promesas = distribuciones.map(distribucion => {
+           console.log("Creando registro para clasificación:", distribucion);
           const nuevoRegistro = {
             id: -1,
             flowid: 11088,
             statusid: 1715,
             statusflowid: 781,
+
+           
             
             // Datos de la clasificación
             opciondesplegabletexto: distribucion.clasificacion,

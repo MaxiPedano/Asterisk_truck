@@ -16,6 +16,8 @@
           </v-btn>
         </div>
 
+      <!-- Selector de compras A B  -->
+
         <v-select
           v-model="vista"
           :items="[
@@ -111,7 +113,7 @@
         <v-data-table
           :headers="headers"
           :items="rowsFiltradas"
-          :items-per-page="10"
+          :items-per-page="30"
           class="elevation-2"
         >
           <template #item.fecha="{ item }">
@@ -142,6 +144,352 @@
           </template>
         </v-data-table>
       </v-col>
+    </v-row>
+
+    <!-- Dialog para clasificar e importes -->
+    <v-dialog v-model="dialogClasificacion" max-width="900" scrollable>
+      <v-card>
+        <v-card-title class="text-h6 d-flex align-center">
+          <v-icon start>mdi-truck-cargo-container</v-icon>
+          Clasificar y Distribuir Importes
+        </v-card-title>
+        
+        <v-divider />
+
+        <v-card-text class="pt-4">
+          <!-- Información de la compra -->
+          <v-card variant="outlined" class="mb-4">
+            <v-card-text>
+              <div class="text-subtitle-2 mb-2">Compra seleccionada:</div>
+              <div><strong>Cliente:</strong> {{ compraSeleccionada?.clientname || 'N/A' }}</div>
+              <div><strong>Referencia:</strong> {{ compraSeleccionada?.referenciatexto || 'N/A' }}</div>
+              <div class="mt-2">
+                <v-chip size="small" class="mr-2">Total Impuestos: {{ formatMoneda(compraSeleccionada?.totalimpuestos) }}</v-chip>
+                <v-chip size="small" class="mr-2">Total Precio: {{ formatMoneda(compraSeleccionada?.totalprecio) }}</v-chip>
+                <v-chip size="small" class="mr-2">VarCN0: {{ formatMoneda(compraSeleccionada?.varcn0) }}</v-chip>
+                <v-chip size="small" class="mr-2">VarCN1: {{ formatMoneda(compraSeleccionada?.varcn1) }}</v-chip>
+                <v-chip size="small" class="mr-2">VarCN2: {{ formatMoneda(compraSeleccionada?.varcn2) }}</v-chip>
+                <v-chip size="small">VarCN3: {{ formatMoneda(compraSeleccionada?.varcn3) }}</v-chip>
+              </div>
+            </v-card-text>
+          </v-card>
+
+          <!-- Distribuciones -->
+          <div class="d-flex justify-space-between align-center mb-3">
+            <h3 class="text-subtitle-1">Distribuciones</h3>
+            <v-btn
+              @click="agregarDistribucion"
+              color="primary"
+              variant="outlined"
+              size="small"
+              prepend-icon="mdi-plus"
+            >
+              Agregar
+            </v-btn>
+          </div>
+
+          <v-card
+            v-for="(dist, index) in distribuciones"
+            :key="index"
+            variant="outlined"
+            class="mb-3"
+          >
+            <v-card-text>
+              <v-row>
+                <v-col cols="12" class="d-flex justify-space-between align-center pb-0">
+                  <span class="text-subtitle-2">Distribución {{ index + 1 }}</span>
+                  <v-btn
+                    v-if="distribuciones.length > 1"
+                    @click="eliminarDistribucion(index)"
+                    icon="mdi-delete"
+                    size="x-small"
+                    variant="text"
+                    color="error"
+                  />
+                </v-col>
+
+                <v-col cols="12" md="6">
+                  <v-select
+                    v-model="dist.clasificacion"
+                    :items="opcionesClasificacion"
+                    label="Clasificación"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-truck"
+                  >
+                    <template #append-inner>
+                      <v-menu>
+                        <template #activator="{ props }">
+                          <v-btn
+                            icon="mdi-plus"
+                            size="x-small"
+                            variant="text"
+                            v-bind="props"
+                          />
+                        </template>
+                        <v-card min-width="250">
+                          <v-card-text>
+                            <v-text-field
+                              v-model="nuevaClasificacion"
+                              label="Nueva clasificación"
+                              density="compact"
+                              @keyup.enter="agregarNuevaClasificacion"
+                            />
+                            <v-btn
+                              block
+                              color="primary"
+                              size="small"
+                              @click="agregarNuevaClasificacion"
+                            >
+                              Agregar
+                            </v-btn>
+                          </v-card-text>
+                        </v-card>
+                      </v-menu>
+                    </template>
+                  </v-select>
+                </v-col>
+
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="dist.porcentaje"
+                    type="number"
+                    label="Porcentaje %"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-percent"
+                    min="0"
+                    max="100"
+                    @input="calcularImportesPorPorcentaje(index)"
+                  />
+                </v-col>
+
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="dist.importes.totalimpuestos"
+                    type="number"
+                    label="Total Impuestos"
+                    variant="outlined"
+                    density="compact"
+                    prefix="$"
+                    step="0.01"
+                  />
+                </v-col>
+
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model.number="dist.importes.totalprecio"
+                    type="number"
+                    label="Total Precio"
+                    variant="outlined"
+                    density="compact"
+                    prefix="$"
+                    step="0.01"
+                  />
+                </v-col>
+
+                <v-col cols="6" md="3">
+                  <v-text-field
+                    v-model.number="dist.importes.varcn0"
+                    type="number"
+                    label="VarCN0"
+                    variant="outlined"
+                    density="compact"
+                    prefix="$"
+                    step="0.01"
+                  />
+                </v-col>
+
+                <v-col cols="6" md="3">
+                  <v-text-field
+                    v-model.number="dist.importes.varcn1"
+                    type="number"
+                    label="VarCN1"
+                    variant="outlined"
+                    density="compact"
+                    prefix="$"
+                    step="0.01"
+                  />
+                </v-col>
+
+                <v-col cols="6" md="3">
+                  <v-text-field
+                    v-model.number="dist.importes.varcn2"
+                    type="number"
+                    label="VarCN2"
+                    variant="outlined"
+                    density="compact"
+                    prefix="$"
+                    step="0.01"
+                  />
+                </v-col>
+
+                <v-col cols="6" md="3">
+                  <v-text-field
+                    v-model.number="dist.importes.varcn3"
+                    type="number"
+                    label="VarCN3"
+                    variant="outlined"
+                    density="compact"
+                    prefix="$"
+                    step="0.01"
+                  />
+                </v-col>
+              </v-row>
+            </v-card-text>
+          </v-card>
+
+          <!-- Totales -->
+          <v-card color="grey-lighten-4" variant="flat" class="mt-4">
+            <v-card-text>
+              <div class="text-subtitle-2 mb-2">Totales distribuidos:</div><template>
+  <v-container>
+    <v-row>
+      <v-col cols="12" class="d-flex align-center justify-space-between">
+        <h2 class="text-h5 font-weight-bold">Listado de Compras</h2>
+
+        <div class="d-flex gap-2">
+          <v-btn
+            @click="cols"
+            color="primary"
+            variant="flat"
+            prepend-icon="mdi-refresh"
+            :loading="store.loading"
+          >
+            Actualizar
+          </v-btn>
+        </div>
+
+      <!-- Selector de compras A B  -->
+
+        <v-select
+          v-model="vista"
+          :items="[
+            { title: 'Compras A', value: 'A' },
+            { title: 'Compras B', value: 'B' },
+          ]"
+          label="Seleccionar vista"
+          variant="outlined"
+          density="compact"
+          style="max-width: 200px"
+        />
+      </v-col>
+
+      <!-- Filtros de fecha -->
+      <v-col cols="12">
+        <v-expansion-panels>
+          <v-expansion-panel>
+            <v-expansion-panel-title>
+              <v-icon start>mdi-filter</v-icon>
+              Filtros de Fecha
+            </v-expansion-panel-title>
+            <v-expansion-panel-text>
+              <v-row>
+                <v-col cols="12">
+                  <div class="text-subtitle-2 mb-2">Fecha</div>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model="filtroFechaDesde"
+                    type="date"
+                    label="Desde"
+                    variant="outlined"
+                    density="compact"
+                    clearable
+                    prepend-inner-icon="mdi-calendar"
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model="filtroFechaHasta"
+                    type="date"
+                    label="Hasta"
+                    variant="outlined"
+                    density="compact"
+                    clearable
+                    prepend-inner-icon="mdi-calendar"
+                  />
+                </v-col>
+
+                <v-col cols="12">
+                  <div class="text-subtitle-2 mb-2">Fecha Compromiso</div>
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model="filtroFechaCompromisoDesde"
+                    type="date"
+                    label="Desde"
+                    variant="outlined"
+                    density="compact"
+                    clearable
+                    prepend-inner-icon="mdi-calendar-clock"
+                  />
+                </v-col>
+                <v-col cols="12" md="6">
+                  <v-text-field
+                    v-model="filtroFechaCompromisoHasta"
+                    type="date"
+                    label="Hasta"
+                    variant="outlined"
+                    density="compact"
+                    clearable
+                    prepend-inner-icon="mdi-calendar-clock"
+                  />
+                </v-col>
+
+                <v-col cols="12" class="text-right">
+                  <v-btn
+                    @click="limpiarFiltros"
+                    color="secondary"
+                    variant="outlined"
+                    size="small"
+                  >
+                    Limpiar filtros
+                  </v-btn>
+                </v-col>
+              </v-row>
+            </v-expansion-panel-text>
+          </v-expansion-panel>
+        </v-expansion-panels>
+      </v-col>
+
+     <v-col cols="12">
+  <div style="width: 100%; overflow-x: auto;">
+    <v-data-table
+      :headers="headers"
+      :items="rowsFiltradas"
+      :items-per-page="30"
+      class="elevation-2"
+    >
+      <template #item.fecha="{ item }">
+        {{ formatFecha(item.fecha) }}
+      </template>
+      <template #item.fechacompromiso="{ item }">
+        {{ formatFecha(item.fechacompromiso) }}   
+      </template>
+      <template #item.totalimpuestos="{ item }">
+        {{ formatMoneda(item.totalimpuestos) }}
+      </template>
+      <template #item.totalprecio="{ item }">
+        {{ formatMoneda(item.totalprecio) }}
+      </template>
+      <template #item.acciones="{ item }">
+        <v-btn
+          icon="mdi-truck-plus"
+          size="small"
+          variant="text"
+          color="primary"
+          @click="abrirDialogClasificar(item)"
+        />
+      </template>
+      <template #no-data>
+        <v-alert type="info" variant="outlined" class="ma-4">
+          No hay registros disponibles.
+        </v-alert>
+      </template>
+    </v-data-table>
+  </div>
+</v-col>
     </v-row>
 
     <!-- Dialog para clasificar e importes -->
@@ -431,6 +779,97 @@
     </v-snackbar>
   </v-container>
 </template>
+ 
+              <v-row dense>
+                <v-col cols="6" md="2">
+                  <div class="text-caption">Total Impuestos</div>
+                  <div class="font-weight-bold">{{ formatMoneda(totalesDistribuidos.totalimpuestos) }}</div>
+                </v-col>
+                <v-col cols="6" md="2">
+                  <div class="text-caption">Total Precio</div>
+                  <div class="font-weight-bold">{{ formatMoneda(totalesDistribuidos.totalprecio) }}</div>
+                </v-col>
+                <v-col cols="6" md="2">
+                  <div class="text-caption">VarCN0</div>
+                  <div class="font-weight-bold">{{ formatMoneda(totalesDistribuidos.varcn0) }}</div>
+                </v-col>
+                <v-col cols="6" md="2">
+                  <div class="text-caption">VarCN1</div>
+                  <div class="font-weight-bold">{{ formatMoneda(totalesDistribuidos.varcn1) }}</div>
+                </v-col>
+                <v-col cols="6" md="2">
+                  <div class="text-caption">VarCN2</div>
+                  <div class="font-weight-bold">{{ formatMoneda(totalesDistribuidos.varcn2) }}</div>
+                </v-col>
+                <v-col cols="6" md="2">
+                  <div class="text-caption">VarCN3</div>
+                  <div class="font-weight-bold">{{ formatMoneda(totalesDistribuidos.varcn3) }}</div>
+                </v-col>
+              </v-row>
+
+              <!-- Advertencias si no coinciden los totales -->
+              <v-alert
+                v-if="!totalesCoincidenCompletamente"
+                type="warning"
+                variant="tonal"
+                density="compact"
+                class="mt-3"
+              >
+                Los totales distribuidos no coinciden exactamente con los importes originales
+              </v-alert>
+            </v-card-text>
+          </v-card>
+        </v-card-text>
+        
+        <v-divider />
+
+        <v-card-actions>
+          <v-btn
+            @click="prorraterarEquitativamente"
+            color="info"
+            variant="outlined"
+            size="small"
+          >
+            Prorratear Equitativamente
+          </v-btn>
+          <v-spacer />
+          <v-btn
+            @click="cerrarDialog"
+            variant="text"
+          >
+            Cancelar
+          </v-btn>
+          <v-btn
+            @click="guardarClasificacion"
+            color="primary"
+            variant="flat"
+            :loading="store.clasificando"
+            :disabled="!puedeGuardar"
+          >
+            Crear {{ distribuciones.length }} Registro(s)
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Snackbar para notificaciones -->
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      :timeout="3000"
+    >
+      {{ snackbar.text }}
+      <template #actions>
+        <v-btn
+          variant="text"
+          @click="snackbar.show = false"
+        >
+          Cerrar
+        </v-btn>
+      </template>
+    </v-snackbar>
+  </v-container>
+</template>
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
@@ -623,13 +1062,27 @@ const headers = computed(() => {
   const currentCols =
     vista.value === "A" ? store.comprasA.cols : store.comprasB.cols;
 
+  // Mapeo de anchos personalizados para cada columna
+  const columnWidths = {
+    'clientname': '250px',
+    'fecha': '120px',
+    'fechacompromiso': '110px',  // Más chica
+    'referenciatexto': '200px',  // Más grande
+    'totalprecio': '140px'
+  };
+
   const headersBase = currentCols
     ?.filter(col => columnasPermitidas.includes(col))
     .map((col) => ({
-      title: col,
+      title: col === 'clientname' ? 'Cliente' : 
+             col === 'fecha' ? 'Fecha' :
+             col === 'fechacompromiso' ? 'Fecha carga' :
+             col === 'referenciatexto' ? 'Referencia' :
+             col === 'totalprecio' ? 'Total Precio' : col,
       key: col,
-      align: "start",
+      align: col.includes('total') || col.includes('varcn') ? 'end' : 'start',
       sortable: true,
+      width: columnWidths[col] || '130px'
     })) || [];
 
   // Agregar columna de acciones
@@ -638,7 +1091,9 @@ const headers = computed(() => {
     key: "acciones",
     align: "center",
     sortable: false,
+    width: '100px'
   });
+  
   return headersBase;
 });
 
@@ -679,7 +1134,13 @@ const rowsFiltradas = computed(() => {
     });
   }
 
-  return resultado;
+  return resultado
+   .sort((a, b) => {
+      const fechaA = a.fecha ? new Date(a.fecha) : new Date(0);
+      const fechaB = b.fecha ? new Date(b.fecha) : new Date(0);
+      return fechaB - fechaA; // Orden descendente
+    })
+    .slice(0, 30); 
 });
 
 const formatFecha = (fecha) =>
@@ -694,7 +1155,7 @@ const formatMoneda = (valor) => {
   }).format(valor);
 };
 </script>
-```
+
 
 ## Características principales implementadas:
 
